@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD 23)
 
 add_executable(Caching_Proxy_CPP
     src/main.cpp
+    src/Cache.cpp
 )
 
 target_include_directories(Caching_Proxy_CPP PRIVATE

@@ -1,17 +1,7 @@
 #include "httplib.h"
-#include <iostream>
-#include <unordered_map>
+#include "Cache.hpp"
 
-struct CachedResponse
-{
-    int status;
-    httplib::Headers headers;
-    std::string body;
-};
-
-std::unordered_map<std::string, CachedResponse> cache;
-
-void StartServer(const std::string &host, int port_number) {
+void StartServer(Cache &cache, const std::string &host, int port_number) {
     httplib::Client cli(host.c_str());
     httplib::Server svr;
 
@@ -22,10 +12,8 @@ void StartServer(const std::string &host, int port_number) {
             key = "/"; 
         }
 
-        auto it = cache.find(key);
-
-        if (it != cache.end()) {
-            const auto &cached = it->second;
+        if (cache.HasUrl(key)) {
+            const auto &cached = cache.get(key);
             res.status = cached.status;
             res.headers = cached.headers; 
             res.body = cached.body;
@@ -55,8 +43,7 @@ void StartServer(const std::string &host, int port_number) {
         cached.headers = origin_res->headers;
         cached.headers.insert({"X-Cache", "HIT"});
         cached.body = origin_res->body;
-
-        cache[key] = std::move(cached);  
+        cache.put(key, cached);
 
         std::cout << "There was a cache miss, so we inserted into the cache!\n";
     });
@@ -66,6 +53,7 @@ void StartServer(const std::string &host, int port_number) {
 
 int main(int argc, char *argv[])
 {
+    Cache cache(15);
     int i = 1;
 
     while (i < argc)
@@ -98,7 +86,7 @@ int main(int argc, char *argv[])
                 host.pop_back();
             }
 
-            StartServer(host, port_number);
+            StartServer(cache, host, port_number);
         }
         else if (keyword == "--clear-cache")
         {
