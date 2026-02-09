@@ -59,6 +59,7 @@ void StartServer(Cache &cache, const std::string &host, int port_number) {
 
 int main(int argc, char *argv[])
 {
+    std::cout << "Example usage: ./proxy --port 8080 --origin-url http://example.com\n";
     Cache cache(15);
     int i = 1;
 
