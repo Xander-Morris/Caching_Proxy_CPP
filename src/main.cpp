@@ -49,9 +49,7 @@ void StartServer(Cache &cache, const std::string &host, int port_number) {
     httplib::Server svr;
 
     svr.Get("/.*", [&](const httplib::Request &req, httplib::Response &res) {
-        std::thread([req, &res, &cache, &cli]() {
-            HandleRequest(req, res, cache, cli);
-        }).detach();
+        HandleRequest(req, res, cache, cli);
     });
 
     bool started = svr.listen("localhost", port_number);
