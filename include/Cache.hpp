@@ -14,6 +14,9 @@ struct CachedResponse
     std::string body;
 };
 
+using CACHE_PAIR = std::pair<std::string, CachedResponse>;
+using PQ_PAIR = std::pair<std::string, int>;
+
 class Cache {
 public:
     Cache(int capacity, int TTLSeconds) : capacity(capacity), TTLSeconds(TTLSeconds) {}
@@ -26,11 +29,11 @@ public:
     int GetMisses();
     void clear();
     int GetCurrentSeconds();
+    PQ_PAIR HeapTop(); // Returns {"", 0} if nothing is in there.
+    void HeapPush(PQ_PAIR);
+    void HeapPop();
 
 private:
-    using CACHE_PAIR = std::pair<std::string, CachedResponse>;
-    using PQ_PAIR = std::pair<std::string, int>;
-
     struct ComparePQPairs {
         bool operator()(const PQ_PAIR& a, const PQ_PAIR& b) const {
             // We want the earliest entry times on the top of the min heap.

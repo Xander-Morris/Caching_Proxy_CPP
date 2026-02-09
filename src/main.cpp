@@ -1,12 +1,15 @@
 #include "httplib.h"
 #include "Cache.hpp"
+#include <thread>
+#include <chrono>
+#include <functional> 
 
 struct ProxyConfig {
     int port = 9090;
     std::string origin_url;
     int cache_size = 15;
-    int ttl = 600;
-};
+    int ttl = 60; // in seconds
+}; 
 
 void LogCacheEvent(Cache &cache, const std::string &url, bool hit) {
     std::cout << "[" << (hit ? "HIT" : "MISS") << "] " << url << "\n";
@@ -80,18 +83,41 @@ void HandleRequest(const httplib::Request &req, httplib::Response &res, Cache &c
     LogCacheEvent(cache, key, false);
 }
 
-void StartServer(Cache &cache, const std::string &host, int port_number) {
-    httplib::Client cli(host.c_str());
+void TTLFunction(Cache &cache, const ProxyConfig &config) {
+    const int interval = config.ttl * 1000 * 0.25;
+
+    while (true) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(interval));
+        const int current_seconds = cache.GetCurrentSeconds();
+        std::cout << "Doing a TTL check.";
+        
+        while (true) {
+            // Returns {"", 0} if nothing is in there.
+            auto top = cache.HeapTop();
+            std::cout << top.first << "\n";
+
+            if (top.first == "" || current_seconds - top.second < config.ttl) {
+                break;
+            }
+
+            cache.HeapPop();
+        }
+    }
+}
+
+void StartServer(Cache &cache, const ProxyConfig &config) {
+    std::thread ttl_thread(TTLFunction, std::ref(cache), std::ref(config));
+    httplib::Client cli(config.origin_url.c_str());
     httplib::Server svr;
 
     svr.Get("/.*", [&](const httplib::Request &req, httplib::Response &res) {
         HandleRequest(req, res, cache, cli);
     });
 
-    bool started = svr.listen("localhost", port_number);
+    bool started = svr.listen("localhost", config.port);
 
     if (!started) {
-        std::cerr << "ERROR: Failed to bind to port " << port_number << ". It is likely being used by something else.\n";
+        std::cerr << "ERROR: Failed to bind to port " << config.port << ". It is likely being used by something else.\n";
     }
 }
 
@@ -133,5 +159,5 @@ int main(int argc, char *argv[])
 
     ProxyConfig config = ParseArgs(argc, argv);
     Cache cache(config.cache_size, config.ttl);
-    StartServer(cache, config.origin_url, config.port);
+    StartServer(cache, config);
 }
