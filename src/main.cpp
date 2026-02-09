@@ -7,8 +7,28 @@ struct ProxyConfig {
     int cache_size = 15;
 };
 
-void LogCacheEvent(const std::string &url, bool hit) {
+void LogCacheEvent(Cache &cache, const std::string &url, bool hit) {
     std::cout << "[" << (hit ? "HIT" : "MISS") << "] " << url << "\n";
+    
+    if (hit) {
+        cache.IncrementHits();
+    } else {
+        cache.IncrementMisses();
+    }
+}
+
+bool MatchesEndpoint(Cache &cache, const std::string &key, httplib::Response &res) {
+    std::string response = "";
+
+    if (key == "/stats") { 
+        response = "HITS: " + std::to_string(cache.GetHits()) + ", MISSES: " + std::to_string(cache.GetMisses()) + "\n";
+    }
+
+    if (response != "") {
+        res.set_content(response, "text/plain");
+    }
+
+    return response != "";
 }
 
 void HandleRequest(const httplib::Request &req, httplib::Response &res, Cache &cache, httplib::Client &cli) {
@@ -18,13 +38,18 @@ void HandleRequest(const httplib::Request &req, httplib::Response &res, Cache &c
         key = "/"; 
     }
 
+    if (MatchesEndpoint(cache, key, res)) {
+        // Do not cache results from endpoint requests.
+        return;
+    }
+
     if (cache.HasUrl(key)) {
         const auto &cached = cache.get(key);
         res.status = cached.status;
         res.headers = cached.headers; 
         res.body = cached.body;
 
-        LogCacheEvent(key, true);
+        LogCacheEvent(cache, key, true);
 
         return;
     }
@@ -51,7 +76,7 @@ void HandleRequest(const httplib::Request &req, httplib::Response &res, Cache &c
     cached.body = origin_res->body;
     cache.put(key, cached);
 
-    LogCacheEvent(key, false);
+    LogCacheEvent(cache, key, false);
 }
 
 void StartServer(Cache &cache, const std::string &host, int port_number) {

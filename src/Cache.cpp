@@ -2,7 +2,6 @@
 
 bool Cache::HasUrl(const std::string &url) {
     std::lock_guard<std::mutex> lock(mtx);
-
     return cache_map.find(url) != cache_map.end();
 }
 
@@ -41,7 +40,24 @@ void Cache::put(const std::string &url, const CachedResponse &cached) {
 
 void Cache::clear() {
     std::lock_guard<std::mutex> lock(mtx);
-    
     cache_list.clear();
     cache_map.clear();
+}
+
+void Cache::IncrementHits() {
+    std::lock_guard<std::mutex> lock(mtx);
+    hits += 1;
+}
+
+void Cache::IncrementMisses() {
+    std::lock_guard<std::mutex> lock(mtx);
+    misses += 1;
+}
+
+int Cache::GetHits() {
+    return hits;
+}
+
+int Cache::GetMisses() {
+    return misses;
 }

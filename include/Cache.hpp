@@ -19,6 +19,10 @@ public:
     bool HasUrl(const std::string &);
     CachedResponse get(const std::string &);
     void put(const std::string &, const CachedResponse &);
+    void IncrementHits();
+    void IncrementMisses();
+    int GetHits();
+    int GetMisses();
     void clear();
 
 private:
@@ -27,6 +31,8 @@ private:
     std::list<CACHE_PAIR> cache_list;
     std::unordered_map<std::string, std::list<CACHE_PAIR>::iterator> cache_map;
     std::mutex mtx;
+    int hits = 0;
+    int misses = 0;
 };
 
 #endif 
