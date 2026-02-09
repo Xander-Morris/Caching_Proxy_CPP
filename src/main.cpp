@@ -1,6 +1,16 @@
 #include "httplib.h"
 #include "Cache.hpp"
 
+struct ProxyConfig {
+    int port = 9090;
+    std::string origin_url;
+    int cache_size = 15;
+};
+
+void LogCacheEvent(const std::string &url, bool hit) {
+    std::cout << "[" << (hit ? "HIT" : "MISS") << "] " << url << "\n";
+}
+
 void HandleRequest(const httplib::Request &req, httplib::Response &res, Cache &cache, httplib::Client &cli) {
     std::string key = req.target; 
 
@@ -14,7 +24,7 @@ void HandleRequest(const httplib::Request &req, httplib::Response &res, Cache &c
         res.headers = cached.headers; 
         res.body = cached.body;
 
-        std::cout << "There was a cache hit!\n";
+        LogCacheEvent(key, true);
 
         return;
     }
@@ -41,7 +51,7 @@ void HandleRequest(const httplib::Request &req, httplib::Response &res, Cache &c
     cached.body = origin_res->body;
     cache.put(key, cached);
 
-    std::cout << "There was a cache miss, so we inserted into the cache!\n";
+    LogCacheEvent(key, false);
 }
 
 void StartServer(Cache &cache, const std::string &host, int port_number) {
@@ -59,6 +69,32 @@ void StartServer(Cache &cache, const std::string &host, int port_number) {
     }
 }
 
+ProxyConfig ParseArgs(int argc, char *argv[]) {
+    ProxyConfig config;
+    int i = 1;
+
+    while (i < argc) {
+        std::string keyword = argv[i];
+
+        if (keyword == "--port") {
+            config.port = std::stoi(argv[++i]);
+        }
+        else if (keyword == "--origin-url") {
+            config.origin_url = argv[++i];
+        }
+        else if (keyword == "--cache-size") {
+            config.cache_size = std::stoi(argv[++i]);
+        }
+        else if (keyword == "--clear-cache") {
+            i++; 
+        }
+
+        i++;
+    }
+
+    return config;
+}
+
 int main(int argc, char *argv[])
 {
     if (argc < 5) {
@@ -66,36 +102,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    int port = 0;
-    std::string origin_url;
-
-    for (int i = 1; i < argc; i++) {
-        std::string arg = argv[i];
-
-        if (arg == "--port" && i + 1 < argc) {
-            port = std::stoi(argv[++i]);
-        }
-        else if (arg == "--origin-url" && i + 1 < argc) {
-            origin_url = argv[++i];
-        }
-    }
-
-    if (port == 0 || origin_url.empty()) {
-        std::cerr << "Missing required arguments\n";
-        return 1;
-    }
-
-    if (origin_url.back() == '/') {
-        origin_url.pop_back();
-    }
-
-    if (origin_url.starts_with("http://")) {
-        origin_url = origin_url.substr(7);
-    }
-    else if (origin_url.starts_with("https://")) {
-        origin_url = origin_url.substr(8);
-    }
-
-    Cache cache(15);
-    StartServer(cache, origin_url, port);
+    ProxyConfig config = ParseArgs(argc, argv);
+    Cache cache(config.cache_size);
+    StartServer(cache, config.origin_url, config.port);
 }
