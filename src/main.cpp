@@ -54,55 +54,50 @@ void StartServer(Cache &cache, const std::string &host, int port_number) {
         }).detach();
     });
 
-    svr.listen("localhost", port_number);
+    bool started = svr.listen("localhost", port_number);
+
+    if (!started) {
+        std::cerr << "ERROR: Failed to bind to port " << port_number << ". It is likely being used by something else.\n";
+    }
 }
 
 int main(int argc, char *argv[])
 {
-    std::cout << "Example usage: --port 8080 --origin-url http://example.com\n";
-    Cache cache(15);
-    int i = 1;
+    if (argc < 5) {
+        std::cout << "Usage: proxy --port <port> --origin-url <url>\n";
+        return 1;
+    }
 
-    while (i < argc)
-    {
-        std::string keyword = argv[i];
+    int port = 0;
+    std::string origin_url;
 
-        if (keyword == "--port")
-        {
-            int port_number = std::stoi(argv[++i]);
-            i += 2;
-            std::string base_url = std::string(argv[i]);
+    for (int i = 1; i < argc; i++) {
+        std::string arg = argv[i];
 
-            if (!base_url.empty() && base_url.back() != '/')
-            {
-                base_url += '/';
-                std::cout << "Normalized base_url to: " << base_url << "\n";
-            }
-
-            std::string host = base_url;
-            if (host.starts_with("http://"))
-            {
-                host = host.substr(7);
-            }
-            if (host.starts_with("https://"))
-            {
-                host = host.substr(8);
-            }
-            if (host.ends_with('/'))
-            {
-                host.pop_back();
-            }
-
-            StartServer(cache, host, port_number);
+        if (arg == "--port" && i + 1 < argc) {
+            port = std::stoi(argv[++i]);
         }
-        else if (keyword == "--clear-cache")
-        {
-            cache.clear();
-            i++;  
-        }
-        else
-        {
-            i++;  
+        else if (arg == "--origin-url" && i + 1 < argc) {
+            origin_url = argv[++i];
         }
     }
+
+    if (port == 0 || origin_url.empty()) {
+        std::cerr << "Missing required arguments\n";
+        return 1;
+    }
+
+    if (origin_url.back() == '/') {
+        origin_url.pop_back();
+    }
+
+    if (origin_url.starts_with("http://")) {
+        origin_url = origin_url.substr(7);
+    }
+    else if (origin_url.starts_with("https://")) {
+        origin_url = origin_url.substr(8);
+    }
+
+    Cache cache(15);
+    StartServer(cache, origin_url, port);
 }
