@@ -125,25 +125,30 @@ ProxyConfig ParseArgs(int argc, char *argv[]) {
     ProxyConfig config;
     int i = 1;
 
-    while (i < argc) {
-        std::string keyword = argv[i];
-
-        if (keyword == "--port") {
+    using CommandFunc = std::function<void()>;
+    std::unordered_map<std::string, CommandFunc> commands = {
+        {"--port", [&]() {
             config.port = std::stoi(argv[++i]);
-        }
-        else if (keyword == "--origin-url") {
+        }},
+        {"--origin-url", [&]() {
             config.origin_url = argv[++i];
-        }
-        else if (keyword == "--cache-size") {
+        }},
+        {"--cache-size", [&]() {
             config.cache_size = std::stoi(argv[++i]);
-        } 
-        else if (keyword == "--ttl") {
+        }},
+        {"--ttl", [&]() {
             config.ttl = std::stoi(argv[++i]);
-        }
-        else if (keyword == "--clear-cache") {
-            i++; 
+        }},
+    };
+
+    while (i < argc) {
+        std::string command = argv[i];
+
+        if (!commands.contains(command)) {
+            throw new std::runtime_error("Invalid command: " + command + "!");
         }
 
+        commands[command]();
         i++;
     }
 

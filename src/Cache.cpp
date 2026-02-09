@@ -44,6 +44,11 @@ void Cache::clear() {
     std::lock_guard<std::mutex> lock(mtx);
     cache_list.clear();
     cache_map.clear();
+    
+    // Since there is no "clear" method for the min heap.
+    while (!min_heap.empty()) {
+        min_heap.pop();
+    }
 }
 
 void Cache::IncrementHits() {
