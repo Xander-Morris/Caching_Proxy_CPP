@@ -1,4 +1,5 @@
 #include "Cache.hpp"
+#include <chrono>
 
 bool Cache::HasUrl(const std::string &url) {
     std::lock_guard<std::mutex> lock(mtx);
@@ -60,4 +61,14 @@ int Cache::GetHits() {
 
 int Cache::GetMisses() {
     return misses;
+}
+
+int Cache::GetCurrentSeconds() {
+    auto now = std::chrono::system_clock::now();
+
+    auto seconds_since_epoch = std::chrono::duration_cast<std::chrono::seconds>(
+        now.time_since_epoch()
+    ).count();
+
+    return seconds_since_epoch;
 }

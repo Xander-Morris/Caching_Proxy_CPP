@@ -5,6 +5,7 @@ struct ProxyConfig {
     int port = 9090;
     std::string origin_url;
     int cache_size = 15;
+    int ttl = 600;
 };
 
 void LogCacheEvent(Cache &cache, const std::string &url, bool hit) {
@@ -109,6 +110,9 @@ ProxyConfig ParseArgs(int argc, char *argv[]) {
         }
         else if (keyword == "--cache-size") {
             config.cache_size = std::stoi(argv[++i]);
+        } 
+        else if (keyword == "--ttl") {
+            config.ttl = std::stoi(argv[++i]);
         }
         else if (keyword == "--clear-cache") {
             i++; 
@@ -128,6 +132,6 @@ int main(int argc, char *argv[])
     }
 
     ProxyConfig config = ParseArgs(argc, argv);
-    Cache cache(config.cache_size);
+    Cache cache(config.cache_size, config.ttl);
     StartServer(cache, config.origin_url, config.port);
 }
