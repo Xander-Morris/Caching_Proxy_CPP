@@ -1,9 +1,10 @@
 #ifndef CACHE_HPP
 #define CACHE_HPP
 
-#include "httplib.h"
 #include <unordered_map>
 #include <list>
+#include <mutex>
+#include "httplib.h"
 
 struct CachedResponse
 {
@@ -25,6 +26,7 @@ private:
     int capacity;
     std::list<CACHE_PAIR> cache_list;
     std::unordered_map<std::string, std::list<CACHE_PAIR>::iterator> cache_map;
+    std::mutex mtx;
 };
 
 #endif 

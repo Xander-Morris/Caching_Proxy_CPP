@@ -1,51 +1,57 @@
 #include "httplib.h"
 #include "Cache.hpp"
 
+void HandleRequest(const httplib::Request &req, httplib::Response &res, Cache &cache, httplib::Client &cli) {
+    std::string key = req.target; 
+
+    if (key.empty()) { 
+        key = "/"; 
+    }
+
+    if (cache.HasUrl(key)) {
+        const auto &cached = cache.get(key);
+        res.status = cached.status;
+        res.headers = cached.headers; 
+        res.body = cached.body;
+
+        std::cout << "There was a cache hit!\n";
+
+        return;
+    }
+
+    auto origin_res = cli.Get(req.target.c_str());  
+
+    if (!origin_res) {
+        std::string error_msg = "Proxy error: " + httplib::to_string(origin_res.error());
+        res.status = 502;
+        res.set_content(error_msg, "text/plain");
+
+        return;
+    }
+
+    res.status = origin_res->status;
+    res.headers = origin_res->headers;
+    res.headers.insert({"X-Cache", "MISS"}); 
+    res.body = origin_res->body;
+
+    CachedResponse cached;
+    cached.status = origin_res->status;
+    cached.headers = origin_res->headers;
+    cached.headers.insert({"X-Cache", "HIT"});
+    cached.body = origin_res->body;
+    cache.put(key, cached);
+
+    std::cout << "There was a cache miss, so we inserted into the cache!\n";
+}
+
 void StartServer(Cache &cache, const std::string &host, int port_number) {
     httplib::Client cli(host.c_str());
     httplib::Server svr;
 
     svr.Get("/.*", [&](const httplib::Request &req, httplib::Response &res) {
-        std::string key = req.target; 
-
-        if (key.empty()) { 
-            key = "/"; 
-        }
-
-        if (cache.HasUrl(key)) {
-            const auto &cached = cache.get(key);
-            res.status = cached.status;
-            res.headers = cached.headers; 
-            res.body = cached.body;
-
-            std::cout << "There was a cache hit!\n";
-
-            return;
-        }
-
-        auto origin_res = cli.Get(req.target.c_str());  
-
-        if (!origin_res) {
-            std::string error_msg = "Proxy error: " + httplib::to_string(origin_res.error());
-            res.status = 502;
-            res.set_content(error_msg, "text/plain");
-
-            return;
-        }
-
-        res.status = origin_res->status;
-        res.headers = origin_res->headers;
-        res.headers.insert({"X-Cache", "MISS"}); 
-        res.body = origin_res->body;
-
-        CachedResponse cached;
-        cached.status = origin_res->status;
-        cached.headers = origin_res->headers;
-        cached.headers.insert({"X-Cache", "HIT"});
-        cached.body = origin_res->body;
-        cache.put(key, cached);
-
-        std::cout << "There was a cache miss, so we inserted into the cache!\n";
+        std::thread([req, &res, &cache, &cli]() {
+            HandleRequest(req, res, cache, cli);
+        }).detach();
     });
 
     svr.listen("localhost", port_number);

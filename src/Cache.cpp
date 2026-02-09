@@ -1,11 +1,17 @@
 #include "Cache.hpp"
 
 bool Cache::HasUrl(const std::string &url) {
+    std::lock_guard<std::mutex> lock(mtx);
+
     return cache_map.find(url) != cache_map.end();
 }
 
 CachedResponse Cache::get(const std::string &url) {
-    if (cache_map.find(url) == cache_map.end()) return CachedResponse{};
+    std::lock_guard<std::mutex> lock(mtx);
+
+    if (cache_map.find(url) == cache_map.end()) {
+        return CachedResponse{};
+    }
     
     cache_list.splice(cache_list.begin(), cache_list, cache_map[url]);
 
@@ -13,6 +19,8 @@ CachedResponse Cache::get(const std::string &url) {
 }
 
 void Cache::put(const std::string &url, const CachedResponse &cached) {
+    std::lock_guard<std::mutex> lock(mtx);
+
     if (cache_map.find(url) != cache_map.end()) {
         cache_map[url]->second = cached;
         cache_list.splice(cache_list.begin(), cache_list, cache_map[url]);
@@ -32,6 +40,8 @@ void Cache::put(const std::string &url, const CachedResponse &cached) {
 }
 
 void Cache::clear() {
+    std::lock_guard<std::mutex> lock(mtx);
+    
     cache_list.clear();
     cache_map.clear();
 }
