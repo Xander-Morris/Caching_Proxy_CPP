@@ -31,7 +31,7 @@ void CacheSpace::Cache::put(const std::string &url, const CachedResponse &cached
     }
 
     cache_list.push_front({url, cached});
-    min_heap.push(p);
+    min_heap.push({url, cached.expires_at});
     cache_map[url] = cache_list.begin();
 }
 
