@@ -51,11 +51,6 @@ namespace CacheSpace {
         }
         void clear();
         int GetCurrentSeconds();
-
-        void HeapPush(CacheSpace::PQ_PAIR p) {
-            std::lock_guard<std::shared_mutex> lock(mtx);
-            min_heap.push(p);
-        };
         bool CheckHeapTop();
         void LogEvent(const std::string&, bool);
 
