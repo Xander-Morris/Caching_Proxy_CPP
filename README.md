@@ -1,1 +1,1 @@
-Usage: proxy --port <port> --origin-url <url>
+Specify the port and origin URL to start the cache. 

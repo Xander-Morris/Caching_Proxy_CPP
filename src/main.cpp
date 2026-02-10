@@ -47,7 +47,7 @@ int main(int argc, char *argv[])
 {
     if (argc < 5) {
         std::cout << "Usage: proxy --port <port> --origin-url <url>\n";
-        return 1;
+        return 1;   
     }
 
     ProxySpace::ProxyConfig config = ParseArgs(argc, argv);
