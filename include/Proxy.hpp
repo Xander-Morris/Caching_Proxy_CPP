@@ -8,10 +8,10 @@
 
 namespace ProxySpace {
     struct ProxyConfig {
-        int port = 9090;
+        int port{9090};
         std::string origin_url;
-        int cache_size = 15;
-        int ttl = 4; // in seconds
+        int cache_size{15};
+        int ttl{4}; // in seconds
     }; 
 
     using HttpClient = std::unique_ptr<httplib::SSLClient>;

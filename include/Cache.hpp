@@ -4,7 +4,8 @@
 #include <unordered_map>
 #include <queue>
 #include <list>
-#include <mutex>
+#include <shared_mutex>
+#include <atomic>
 #include "httplib.h"
 
 namespace CacheSpace {
@@ -22,22 +23,42 @@ namespace CacheSpace {
     class Cache {
     public:
         Cache(int capacity, int ttl_seconds) : capacity(capacity), ttl_seconds(ttl_seconds) {}
-        bool HasUrl(const std::string &);
+
+        bool HasUrl(const std::string &url) {
+            std::shared_lock<std::shared_mutex> lock(mtx);
+            return cache_map.find(url) != cache_map.end();
+        }
         CachedResponse get(const std::string &);
         void put(const std::string &, const CachedResponse &);
+
         void IncrementURLHitsOrMisses(const std::string&, bool);
-        void IncrementHits(const std::string&);
-        void IncrementMisses(const std::string&);
-        int GetHits();
-        int GetMisses();
-        const std::unordered_map<std::string, CacheSpace::HITS_AND_MISSES_PAIR> GetURLHitsAndMisses() const;
+        void IncrementHits(const std::string& key) { 
+            hits.fetch_add(1, std::memory_order_relaxed); 
+            IncrementURLHitsOrMisses(key, true);
+        }
+        void IncrementMisses(const std::string& key) { 
+            misses.fetch_add(1, std::memory_order_relaxed); 
+            IncrementURLHitsOrMisses(key, false);
+        }
+        int GetHits() const { return hits.load(std::memory_order_relaxed); }
+        int GetMisses() const { return misses.load(std::memory_order_relaxed); }
+
+        const std::unordered_map<std::string, CacheSpace::HITS_AND_MISSES_PAIR> GetURLHitsAndMisses() const {
+            std::shared_lock<std::shared_mutex> lock(mtx);
+            return url_hits_and_misses;
+        }
         void clear();
         int GetCurrentSeconds();
+
         PQ_PAIR HeapTop(); // Returns {"", 0} if nothing is in there.
-        void HeapPush(PQ_PAIR);
+        void HeapPush(CacheSpace::PQ_PAIR p) {
+            std::lock_guard<std::shared_mutex> lock(mtx);
+            min_heap.push(p);
+        };
         void HeapPop();
-        friend std::ostream& operator<<(std::ostream& os, const Cache& cache);
         void LogEvent(const std::string&, bool);
+
+        friend std::ostream& operator<<(std::ostream& os, const Cache& cache);
 
     private:
         struct ComparePQPairs {
@@ -51,13 +72,14 @@ namespace CacheSpace {
         std::unordered_map<std::string, std::list<CacheSpace::CACHE_PAIR>::iterator> cache_map;
         std::unordered_map<std::string, CacheSpace::HITS_AND_MISSES_PAIR> url_hits_and_misses; 
         std::priority_queue<PQ_PAIR, std::vector<PQ_PAIR>, ComparePQPairs> min_heap;
-        std::mutex mtx;
-        int hits = 0;
-        int misses = 0;
+        mutable std::shared_mutex mtx;
+        std::atomic<int> hits{0};
+        std::atomic<int> misses{0};
         int capacity;
         int ttl_seconds;
     };
 
+    // Declared outside of the class.
     inline std::ostream& operator<<(std::ostream& os, const CacheSpace::Cache& cache) {
         os << "CACHE DATA\n"
         << "Hits: " << cache.hits

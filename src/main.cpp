@@ -4,7 +4,7 @@
 // This is only needed for the initial creation, so I defined it here.
 ProxySpace::ProxyConfig ParseArgs(int argc, char *argv[]) {
     ProxySpace::ProxyConfig config;
-    int i = 1;
+    int i{1};
 
     using CommandFunc = std::function<void()>;
     std::unordered_map<std::string, CommandFunc> commands = {

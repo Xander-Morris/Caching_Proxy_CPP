@@ -81,6 +81,7 @@ void ProxySpace::Proxy::HandleRequest(const httplib::Request &req, httplib::Resp
 }
 
 void ProxySpace::Proxy::TTLFunction() {
+    // The implicit narrowing conversion from a double to an int is intended here, it is not a mistake. 
     const int interval = config.ttl * 1000 * 0.25;
 
     while (true) {
