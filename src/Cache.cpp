@@ -1,12 +1,12 @@
 #include "Cache.hpp"
 #include <chrono>
 
-bool Cache::HasUrl(const std::string &url) {
+bool CacheSpace::Cache::HasUrl(const std::string &url) {
     std::lock_guard<std::mutex> lock(mtx);
     return cache_map.find(url) != cache_map.end();
 }
 
-CachedResponse Cache::get(const std::string &url) {
+CacheSpace::CachedResponse CacheSpace::Cache::get(const std::string &url) {
     std::lock_guard<std::mutex> lock(mtx);
 
     if (cache_map.find(url) == cache_map.end()) {
@@ -18,7 +18,7 @@ CachedResponse Cache::get(const std::string &url) {
     return cache_map[url]->second;
 }
 
-void Cache::put(const std::string &url, const CachedResponse &cached) {
+void CacheSpace::Cache::put(const std::string &url, const CachedResponse &cached) {
     std::lock_guard<std::mutex> lock(mtx);
 
     if (cache_map.find(url) != cache_map.end()) {
@@ -40,7 +40,7 @@ void Cache::put(const std::string &url, const CachedResponse &cached) {
     cache_map[url] = cache_list.begin();
 }
 
-void Cache::clear() {
+void CacheSpace::Cache::clear() {
     std::lock_guard<std::mutex> lock(mtx);
     cache_list.clear();
     cache_map.clear();
@@ -51,25 +51,25 @@ void Cache::clear() {
     }
 }
 
-void Cache::IncrementHits() {
+void CacheSpace::Cache::IncrementHits() {
     std::lock_guard<std::mutex> lock(mtx);
     hits += 1;
 }
 
-void Cache::IncrementMisses() {
+void CacheSpace::Cache::IncrementMisses() {
     std::lock_guard<std::mutex> lock(mtx);
     misses += 1;
 }
 
-int Cache::GetHits() {
+int CacheSpace::Cache::GetHits() {
     return hits;
 }
 
-int Cache::GetMisses() {
+int CacheSpace::Cache::GetMisses() {
     return misses;
 }
 
-int Cache::GetCurrentSeconds() {
+int CacheSpace::Cache::GetCurrentSeconds() {
     auto now = std::chrono::system_clock::now();
 
     auto seconds_since_epoch = std::chrono::duration_cast<std::chrono::seconds>(
@@ -80,7 +80,7 @@ int Cache::GetCurrentSeconds() {
 }
 
 // Returns {"", 0} if nothing is in there.
-PQ_PAIR Cache::HeapTop() {
+CacheSpace::PQ_PAIR CacheSpace::Cache::HeapTop() {
     if (min_heap.size() <= 0) {
         return {"", 0};
     }
@@ -88,11 +88,11 @@ PQ_PAIR Cache::HeapTop() {
     return min_heap.top();
 }
 
-void Cache::HeapPush(PQ_PAIR p) {
+void CacheSpace::Cache::HeapPush(CacheSpace::PQ_PAIR p) {
     min_heap.push(p);
 }
 
-void Cache::HeapPop() {
+void CacheSpace::Cache::HeapPop() {
     if (min_heap.size() <= 0) return;
 
     std::cout << "Popping from the heap due to TTL issues.\n";
@@ -109,7 +109,15 @@ void Cache::HeapPop() {
     };
 
     cache_list.remove_if(MatchesP);
+    std::cout << *this;
+}
 
-    std::cout << "New container sizes after popping from the heap:\nMin heap size: " 
-        << min_heap.size() << ", Cache map size: " << cache_map.size() << ", Cache list size: " << cache_list.size() << "\n";
+void CacheSpace::Cache::LogEvent(const std::string &url, bool hit) {
+    std::cout << "[" << (hit ? "HIT" : "MISS") << "] " << url << "\n";
+    
+    if (hit) {
+        IncrementHits();
+    } else {
+        IncrementMisses();
+    }
 }
