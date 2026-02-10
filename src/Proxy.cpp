@@ -54,21 +54,22 @@ void ProxySpace::Proxy::HandleRequest(const httplib::Request &req, httplib::Resp
         return;
     }
 
-    auto origin_res = cli.Get(req.target.c_str());  
+    auto origin_res = cli->Get(req.target.c_str());
 
     if (!origin_res) {
         std::string error_msg = "Proxy error: " + httplib::to_string(origin_res.error());
         res.status = 502;
         res.set_content(error_msg, "text/plain");
-
         return;
     }
 
+    // Set the response data
     res.status = origin_res->status;
     res.headers = origin_res->headers;
-    res.headers.insert({"X-Cache", "MISS"}); 
+    res.headers.insert({"X-Cache", "MISS"});
     res.body = origin_res->body;
 
+    // Cache the response
     CacheSpace::CachedResponse cached;
     cached.status = origin_res->status;
     cached.headers = origin_res->headers;

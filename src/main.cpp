@@ -12,7 +12,14 @@ ProxySpace::ProxyConfig ParseArgs(int argc, char *argv[]) {
             config.port = std::stoi(argv[++i]);
         }},
         {"--origin-url", [&]() {
-            config.origin_url = argv[++i];
+            std::string base_url = argv[++i];
+            std::string ignore = "https://";
+
+            if (base_url.starts_with(ignore)) {
+                base_url = base_url.substr(ignore.size(), base_url.size() - ignore.size());
+            }
+
+            config.origin_url = base_url;
         }},
         {"--cache-size", [&]() {
             config.cache_size = std::stoi(argv[++i]);
