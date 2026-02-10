@@ -35,10 +35,12 @@ void CacheSpace::Cache::put(const std::string &url, const CachedResponse &cached
     cache_map[url] = cache_list.begin();
 }
 
+// This is not currently called anywhere, but I have it here just in case. 
 void CacheSpace::Cache::clear() {
     std::unique_lock<std::shared_mutex> lock(mtx);
     cache_list.clear();
     cache_map.clear();
+    url_hits_and_misses.clear();
     
     // Since there is no "clear" method for the min heap.
     while (!min_heap.empty()) {
@@ -46,7 +48,7 @@ void CacheSpace::Cache::clear() {
     }
 }
 
-// IncrementHits and IncrementMisses already lock, so none is needed here.
+// No lock is needed here.
 void CacheSpace::Cache::IncrementURLHitsOrMisses(const std::string& key, bool is_hit) {
     std::unique_lock<std::shared_mutex> lock(mtx);
 

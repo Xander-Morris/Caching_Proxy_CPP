@@ -33,12 +33,17 @@ ProxySpace::ProxyConfig ParseArgs(int argc, char *argv[]) {
         std::string command = argv[i];
 
         if (!commands.contains(command)) {
-            throw new std::runtime_error("Invalid command: " + command + "!");
+            throw std::runtime_error("Invalid command: " + command + "!");
         }
 
         commands[command]();
         i++;
     }
+
+    assert(("Port number must be > 0", config.port > 0));
+    assert(("Cache size must be > 0", config.cache_size > 0));
+    assert(("TTL must be > 0", config.ttl > 0));
+    assert(("Origin url must be non-empty", !config.origin_url.empty()));
 
     return config;
 }

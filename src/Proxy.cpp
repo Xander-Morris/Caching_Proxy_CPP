@@ -5,6 +5,15 @@ bool ProxySpace::Proxy::MatchesEndpoint(const std::string &key, httplib::Respons
     std::unordered_map<std::string, CommandFunc> commands = {
         {"/stats", [&]() {
             auto hits_and_misses = cache.GetURLHitsAndMisses();
+
+            if (hits_and_misses.size() == 0) {
+                res.set_content(
+                    "No cache activity yet.\n",
+                    "text/plain"
+                );
+                return;
+            }
+
             std::string per_url_info = "";
 
             for (const auto& pair : hits_and_misses) {
