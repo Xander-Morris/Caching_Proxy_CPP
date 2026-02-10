@@ -27,7 +27,6 @@ void CacheSpace::Cache::put(const std::string &url, const CachedResponse &cached
         std::string last_key = cache_list.back().first;
         cache_map.erase(last_key);
         cache_list.pop_back();
-        std::cout << "Popped off from the LRU cache!\n";
     }
 
     cache_list.push_front({url, cached});

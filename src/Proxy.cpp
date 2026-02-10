@@ -50,13 +50,11 @@ void ProxySpace::Proxy::HandleRequest(const httplib::Request &req, httplib::Resp
     std::cout << "There is a request for path: " << key << "\n";
 
     if (MatchesEndpoint(key, res)) {
-        std::cout << "Matched an endpoint!\n";
         // Do not cache results from endpoint requests.
         return;
     }
 
     if (cache.HasUrl(key)) {
-        std::cout << "Was in the cache!\n";
         const auto &cached = cache.get(key);
         res.status = cached.status;
         res.headers = cached.headers; 
@@ -71,11 +69,9 @@ void ProxySpace::Proxy::HandleRequest(const httplib::Request &req, httplib::Resp
     headers.insert({"Host", config.origin_url});
     headers.insert({"Connection", "close"});
 
-    std::cout << "About to send request!\n";
     auto origin_res = cli->Get(req.target.c_str(), headers);
 
     if (!origin_res) {
-        std::cout << "There was an error when getting the result.\n";
         std::string error_msg = "Proxy error: " + httplib::to_string(origin_res.error());
         res.status = 502;
         res.set_content(error_msg, "text/plain");
@@ -88,8 +84,6 @@ void ProxySpace::Proxy::HandleRequest(const httplib::Request &req, httplib::Resp
     if (it != origin_res->headers.end()) {
         max_age = ParseMaxAge(it->second);
     }
-
-    std::cout << "Result has status of: " << origin_res->status << "\n";
 
     res.status = origin_res->status;
     res.body = origin_res->body;
@@ -148,7 +142,6 @@ void ProxySpace::Proxy::TTLFunction() {
     while (true) {
         std::this_thread::sleep_for(std::chrono::milliseconds(interval));
         const int current_seconds = cache.GetCurrentSeconds();
-        std::cout << "Doing a TTL check.\n";
         
         while (cache.CheckHeapTop()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(interval));
