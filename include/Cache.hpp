@@ -17,17 +17,20 @@ namespace CacheSpace {
 
     using CACHE_PAIR = std::pair<std::string, CachedResponse>;
     using PQ_PAIR = std::pair<std::string, int>;
+    using HITS_AND_MISSES_PAIR = std::pair<long long, long long>;
 
     class Cache {
     public:
-        Cache(int capacity, int TTLSeconds) : capacity(capacity), TTLSeconds(TTLSeconds) {}
+        Cache(int capacity, int ttl_seconds) : capacity(capacity), ttl_seconds(ttl_seconds) {}
         bool HasUrl(const std::string &);
         CachedResponse get(const std::string &);
         void put(const std::string &, const CachedResponse &);
-        void IncrementHits();
-        void IncrementMisses();
+        void IncrementURLHitsOrMisses(const std::string&, bool);
+        void IncrementHits(const std::string&);
+        void IncrementMisses(const std::string&);
         int GetHits();
         int GetMisses();
+        const std::unordered_map<std::string, CacheSpace::HITS_AND_MISSES_PAIR> GetURLHitsAndMisses() const;
         void clear();
         int GetCurrentSeconds();
         PQ_PAIR HeapTop(); // Returns {"", 0} if nothing is in there.
@@ -45,13 +48,14 @@ namespace CacheSpace {
         };
         
         std::list<CACHE_PAIR> cache_list; 
-        std::unordered_map<std::string, std::list<CACHE_PAIR>::iterator> cache_map;
+        std::unordered_map<std::string, std::list<CacheSpace::CACHE_PAIR>::iterator> cache_map;
+        std::unordered_map<std::string, CacheSpace::HITS_AND_MISSES_PAIR> url_hits_and_misses; 
         std::priority_queue<PQ_PAIR, std::vector<PQ_PAIR>, ComparePQPairs> min_heap;
         std::mutex mtx;
         int hits = 0;
         int misses = 0;
         int capacity;
-        int TTLSeconds;
+        int ttl_seconds;
     };
 
     inline std::ostream& operator<<(std::ostream& os, const CacheSpace::Cache& cache) {
@@ -59,7 +63,7 @@ namespace CacheSpace {
         << "Hits: " << cache.hits
         << ", Misses: " << cache.misses << "\n"
         << "Capacity: " << cache.capacity << "\n"
-        << "TTL Seconds: " << cache.TTLSeconds << "\n"
+        << "TTL Seconds: " << cache.ttl_seconds << "\n"
         << "Size of cache: " << cache.cache_list.size() << "\n";
 
         return os;

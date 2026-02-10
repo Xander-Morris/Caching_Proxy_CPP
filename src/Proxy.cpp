@@ -4,8 +4,18 @@ bool ProxySpace::Proxy::MatchesEndpoint(const std::string &key, httplib::Respons
     using CommandFunc = std::function<void()>;
     std::unordered_map<std::string, CommandFunc> commands = {
         {"/stats", [&]() {
+            auto hits_and_misses = cache.GetURLHitsAndMisses();
+            std::string per_url_info = "";
+
+            for (const auto& pair : hits_and_misses) {
+                std::string append = pair.first + ": HITS: " 
+                    + std::to_string(pair.second.first) + ", MISSES: " + std::to_string(pair.second.second) + "\n"; 
+                per_url_info += append;
+            }
+
             res.set_content(
-                "HITS: " + std::to_string(cache.GetHits()) + ", MISSES: " + std::to_string(cache.GetMisses()) + "\n", 
+                "HITS: " + std::to_string(cache.GetHits()) + ", MISSES: " + std::to_string(cache.GetMisses()) + "\n" 
+                + "Broken down by url:\n" + per_url_info, 
                 "text/plain"
             );
         }},

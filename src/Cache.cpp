@@ -51,14 +51,25 @@ void CacheSpace::Cache::clear() {
     }
 }
 
-void CacheSpace::Cache::IncrementHits() {
-    std::lock_guard<std::mutex> lock(mtx);
-    hits += 1;
+void CacheSpace::Cache::IncrementURLHitsOrMisses(const std::string& key, bool is_hit) {
+    if (!url_hits_and_misses.contains(key)) {
+        url_hits_and_misses[key] = {0, 0};
+    }
+
+    url_hits_and_misses[key].first += is_hit ? 1 : 0;
+    url_hits_and_misses[key].second += is_hit ? 0 : 1;
 }
 
-void CacheSpace::Cache::IncrementMisses() {
+void CacheSpace::Cache::IncrementHits(const std::string& key) {
+    std::lock_guard<std::mutex> lock(mtx);
+    hits += 1;
+    IncrementURLHitsOrMisses(key, true);
+}
+
+void CacheSpace::Cache::IncrementMisses(const std::string& key) {
     std::lock_guard<std::mutex> lock(mtx);
     misses += 1;
+    IncrementURLHitsOrMisses(key, false);
 }
 
 int CacheSpace::Cache::GetHits() {
@@ -116,8 +127,12 @@ void CacheSpace::Cache::LogEvent(const std::string &url, bool hit) {
     std::cout << "[" << (hit ? "HIT" : "MISS") << "] " << url << "\n";
     
     if (hit) {
-        IncrementHits();
+        IncrementHits(url);
     } else {
-        IncrementMisses();
+        IncrementMisses(url);
     }
+}
+
+const std::unordered_map<std::string, CacheSpace::HITS_AND_MISSES_PAIR> CacheSpace::Cache::GetURLHitsAndMisses() const {
+    return url_hits_and_misses;
 }
