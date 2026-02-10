@@ -1,2 +1,1 @@
-This is a caching proxy server written in C++ that uses httplib.h. It uses both an LRU scheme and a TTL scheme for cache expiration.
-You can specify the origin url, and view the stats for the cache by heading to http://localhost:9090/stats. 
+Usage: proxy --port <port> --origin-url <url>
