@@ -12,12 +12,13 @@ namespace CacheSpace {
     struct CachedResponse
     {
         int status;
+        int expires_at;
         httplib::Headers headers;
         std::string body;
     };
 
     using CACHE_PAIR = std::pair<std::string, CachedResponse>;
-    using PQ_PAIR = std::pair<std::string, int>;
+    using PQ_PAIR = std::pair<std::string, int>; // url, expire time
     using HITS_AND_MISSES_PAIR = std::pair<long long, long long>;
 
     class Cache {
@@ -40,6 +41,7 @@ namespace CacheSpace {
             misses.fetch_add(1, std::memory_order_relaxed); 
             IncrementURLHitsOrMisses(key, false);
         }
+        void Evict(const std::string&);
         int GetHits() const { return hits.load(std::memory_order_relaxed); }
         int GetMisses() const { return misses.load(std::memory_order_relaxed); }
 
@@ -50,12 +52,11 @@ namespace CacheSpace {
         void clear();
         int GetCurrentSeconds();
 
-        PQ_PAIR HeapTop(); // Returns {"", 0} if nothing is in there.
         void HeapPush(CacheSpace::PQ_PAIR p) {
             std::lock_guard<std::shared_mutex> lock(mtx);
             min_heap.push(p);
         };
-        void HeapPop();
+        bool CheckHeapTop();
         void LogEvent(const std::string&, bool);
 
         friend std::ostream& operator<<(std::ostream& os, const Cache& cache);
@@ -63,7 +64,7 @@ namespace CacheSpace {
     private:
         struct ComparePQPairs {
             bool operator()(const PQ_PAIR& a, const PQ_PAIR& b) const {
-                // We want the earliest entry times on the top of the min heap.
+                // We want the earliest expire times on the top of the min heap.
                 return a.second > b.second;
             }
         };

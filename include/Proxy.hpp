@@ -21,10 +21,14 @@ namespace ProxySpace {
         Proxy(ProxyConfig &config) : config(config), cache(config.cache_size, config.ttl) {
             cli = std::make_unique<httplib::SSLClient>(config.origin_url.c_str());
             cli->enable_server_certificate_verification(true); // ensures HTTPS works
+            cli->set_keep_alive(false);
+            cli->set_read_timeout(5, 0);
+            cli->set_connection_timeout(5, 0);
         }
         void StartServer();
         void HandleRequest(const httplib::Request&, httplib::Response&);
         bool MatchesEndpoint(const std::string&, httplib::Response&);
+        std::optional<int> ParseMaxAge(const std::string&);
 
     private:
         void TTLFunction();

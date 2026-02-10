@@ -31,7 +31,7 @@ void CacheSpace::Cache::put(const std::string &url, const CachedResponse &cached
     }
 
     cache_list.push_front({url, cached});
-    HeapPush({url, GetCurrentSeconds()});
+    HeapPush({url, cached.expires_at});
     cache_map[url] = cache_list.begin();
 }
 
@@ -70,27 +70,16 @@ int CacheSpace::Cache::GetCurrentSeconds() {
     return seconds_since_epoch;
 }
 
-// Returns {"", 0} if nothing is in there.
-CacheSpace::PQ_PAIR CacheSpace::Cache::HeapTop() {
-    std::shared_lock<std::shared_mutex> lock(mtx);
-
-    if (min_heap.size() <= 0) {
-        return {"", 0};
-    }
-
-    return min_heap.top();
-}
-
-void CacheSpace::Cache::HeapPop() {
-    std::lock_guard<std::shared_mutex> lock(mtx);
-
+void CacheSpace::Cache::Evict(const std::string &key) {
     if (min_heap.size() <= 0) return;
 
-    std::cout << "Popping from the heap due to TTL issues.\n";
+    std::lock_guard<std::shared_mutex> lock(mtx);
     auto p = min_heap.top();
-    min_heap.pop();
 
-    // I want to remove from the other containers as well.
+    if (p.first == key) {
+        min_heap.pop();
+    }
+
     if (cache_map.contains(p.first)) {
         cache_map.erase(p.first);
     }
@@ -103,10 +92,16 @@ void CacheSpace::Cache::HeapPop() {
     std::cout << *this;
 }
 
-void CacheSpace::Cache::LogEvent(const std::string &url, bool hit) {
-    std::lock_guard<std::shared_mutex> lock(mtx);
-    std::cout << "[" << (hit ? "HIT" : "MISS") << "] " << url << "\n";
-    
+bool CacheSpace::Cache::CheckHeapTop() {
+    if (min_heap.size() <= 0) return false;
+    if (GetCurrentSeconds() < min_heap.top().second) return false;
+
+    Evict(min_heap.top().first);
+
+    return true;
+}
+
+void CacheSpace::Cache::LogEvent(const std::string &url, bool hit) {    
     if (hit) {
         IncrementHits(url);
     } else {
