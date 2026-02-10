@@ -41,9 +41,13 @@ namespace CacheSpace {
             misses.fetch_add(1, std::memory_order_relaxed); 
             IncrementURLHitsOrMisses(key, false);
         }
+        void IncrementCompliantMisses() {
+            compliant_misses.fetch_add(1, std::memory_order_relaxed);
+        }
         void Evict(const std::string&);
         int GetHits() const { return hits.load(std::memory_order_relaxed); }
         int GetMisses() const { return misses.load(std::memory_order_relaxed); }
+        int GetCompliantMisses() const { return compliant_misses.load(std::memory_order_relaxed); }
 
         const std::unordered_map<std::string, CacheSpace::HITS_AND_MISSES_PAIR> GetURLHitsAndMisses() const {
             std::shared_lock<std::shared_mutex> lock(mtx);
@@ -71,6 +75,7 @@ namespace CacheSpace {
         mutable std::shared_mutex mtx;
         std::atomic<int> hits{0};
         std::atomic<int> misses{0};
+        std::atomic<int> compliant_misses{0};
         int capacity;
         int ttl_seconds;
     };
@@ -80,6 +85,7 @@ namespace CacheSpace {
         os << "CACHE DATA\n"
         << "Hits: " << cache.hits
         << ", Misses: " << cache.misses << "\n"
+        << ", Compliant Misses: " << cache.compliant_misses << "\n"
         << "Capacity: " << cache.capacity << "\n"
         << "TTL Seconds: " << cache.ttl_seconds << "\n"
         << "Size of cache: " << cache.cache_list.size() << "\n";

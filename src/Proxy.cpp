@@ -6,7 +6,7 @@ bool ProxySpace::Proxy::MatchesEndpoint(const std::string &key, httplib::Respons
         {"/stats", [&]() {
             auto hits_and_misses = cache.GetURLHitsAndMisses();
 
-            if (hits_and_misses.size() == 0) {
+            if (hits_and_misses.size() == 0 && cache.GetCompliantMisses() == 0) {
                 res.set_content(
                     "No cache activity yet.\n",
                     "text/plain"
@@ -17,14 +17,15 @@ bool ProxySpace::Proxy::MatchesEndpoint(const std::string &key, httplib::Respons
             std::string per_url_info = "";
 
             for (const auto& pair : hits_and_misses) {
-                std::string append = pair.first + ": HITS: " 
-                    + std::to_string(pair.second.first) + ", MISSES: " + std::to_string(pair.second.second) + "\n"; 
+                std::string append = pair.first + ": Hits: " 
+                    + std::to_string(pair.second.first) + ", Misses: " + std::to_string(pair.second.second) + "\n"; 
                 per_url_info += append;
             }
 
             res.set_content(
-                "HITS: " + std::to_string(cache.GetHits()) + ", MISSES: " + std::to_string(cache.GetMisses()) + "\n" 
-                + "Broken down by url:\n" + per_url_info, 
+                "Hits: " + std::to_string(cache.GetHits()) + "\nMisses: " + std::to_string(cache.GetMisses()) + "\n" 
+                + "Compliant Misses: " + std::to_string(cache.GetCompliantMisses()) + "\n"
+                + "Hits and misses (non-compliant) broken down by url:\n" + per_url_info, 
                 "text/plain"
             );
         }},
@@ -116,12 +117,6 @@ void ProxySpace::Proxy::HandleRequest(const httplib::Request &req, httplib::Resp
 
     res.headers = filtered_headers;
     res.headers.insert({"X-Cache", "MISS"});
-
-    CacheSpace::CachedResponse cached;
-    cached.status = origin_res->status;
-    cached.body = origin_res->body;
-    cached.headers = filtered_headers;  
-    cached.headers.insert({"X-Cache", "HIT"});
     int now = cache.GetCurrentSeconds();
     int to_add = config.ttl;
 
@@ -129,15 +124,24 @@ void ProxySpace::Proxy::HandleRequest(const httplib::Request &req, httplib::Resp
         to_add = int(*max_age);
     }
 
+    // Do not cache it if the TTL is 0.
+    if (to_add == 0) {
+        cache.IncrementCompliantMisses();
+        return;
+    }
+
+    CacheSpace::CachedResponse cached;
+    cached.status = origin_res->status;
+    cached.body = origin_res->body;
+    cached.headers = filtered_headers;  
+    cached.headers.insert({"X-Cache", "HIT"});
     cached.expires_at = now + to_add;
     cache.put(key, cached);
-
-    cache.LogEvent(key, false);
+    cache.LogEvent(key, false); // Only log the miss if the request was meant to be cached in the first place.
 }
 
 void ProxySpace::Proxy::TTLFunction() {
-    // The implicit narrowing conversion from a double to an int is intended here, it is not a mistake. 
-    const int interval = config.ttl * 1000 * 0.25;
+    const int interval = 1000;
 
     while (true) {
         std::this_thread::sleep_for(std::chrono::milliseconds(interval));
@@ -164,7 +168,9 @@ void ProxySpace::Proxy::StartServer() {
     }
 }
 
+// It is possible for the max age to be 0.
 std::optional<int> ProxySpace::Proxy::ParseMaxAge(const std::string& cache_control) {
+    std::cout << "Cache control is: " << cache_control << "\n";
     std::stringstream ss(cache_control);
     std::string directive;
 
@@ -183,6 +189,8 @@ std::optional<int> ProxySpace::Proxy::ParseMaxAge(const std::string& cache_contr
             } catch (...) {
                 return std::nullopt;
             }
+        } else if (lower.rfind("no-store", 0) == 0 || lower.rfind("no-cache", 0) == 0) {
+            return 0;
         }
     }
 
