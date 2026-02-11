@@ -15,10 +15,24 @@ int main()
     json results = json::parse(config_file);
     std::vector<std::thread> threads;
 
-    for (const auto& [key, value] : results.items()) {
+    for (const auto& [key, value] : results.items()) {        
+        if (!value.contains("port") || !value.contains("origin-url") || !value.contains("cache-size") || !value.contains("ttl")) {
+            throw std::runtime_error("Config for " + key + " is missing required fields!");
+        }
+
         ProxySpace::ProxyConfig config;
+
+        // Make sure that the origin_url does not have "https://" in front. 
+        std::string origin_url = value["origin-url"];
+
+        if (origin_url.rfind("https://", 0) == 0) {
+            origin_url = origin_url.substr(8);
+        } else if (origin_url.rfind("http://", 0) == 0) {
+            origin_url = origin_url.substr(7);
+        }
+
         config.port = value["port"];
-        config.origin_url = value["origin-url"];
+        config.origin_url = origin_url;
         config.cache_size = value["cache-size"];
         config.ttl = value["ttl"];
 
