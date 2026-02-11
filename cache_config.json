@@ -1,0 +1,14 @@
+{
+    "1": {
+        "port": 8100,
+        "origin-url": "https://httpbin.org",
+        "cache-size": 100,
+        "ttl": 100
+    },
+    "2": {
+        "port": 9090,
+        "origin-url": "www.roblox.com",
+        "cache-size": 50,
+        "ttl": 50
+    }
+}

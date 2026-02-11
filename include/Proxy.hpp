@@ -14,11 +14,14 @@ namespace ProxySpace {
         int ttl{4}; // in seconds
     }; 
 
+    const std::array<std::string_view, 5> PROXY_FIELDS = {
+        "port", "origin_url", "cache_size", "ttl",
+    };
     using HttpClient = std::unique_ptr<httplib::SSLClient>;
 
     class Proxy {
     public:
-        Proxy(ProxyConfig &config) : config(config), cache(config.cache_size, config.ttl) {
+        explicit Proxy(const ProxyConfig &config) : config(config), cache(config.cache_size, config.ttl) {
             cli = std::make_unique<httplib::SSLClient>(config.origin_url.c_str());
             cli->enable_server_certificate_verification(true); // ensures HTTPS works
             cli->set_keep_alive(false);
@@ -29,6 +32,7 @@ namespace ProxySpace {
         void HandleRequest(const httplib::Request&, httplib::Response&);
         bool MatchesEndpoint(const std::string&, httplib::Response&);
         std::optional<int> ParseMaxAge(const std::string&);
+        void LogMessage(const std::string&);
 
     private:
         void TTLFunction();

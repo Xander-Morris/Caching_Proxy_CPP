@@ -41,6 +41,10 @@ bool ProxySpace::Proxy::MatchesEndpoint(const std::string &key, httplib::Respons
     return true;
 }
 
+void ProxySpace::Proxy::LogMessage(const std::string &message) {
+    std::cout << "[PORT " << config.port << "] " << message << "\n";
+}
+
 void ProxySpace::Proxy::HandleRequest(const httplib::Request &req, httplib::Response &res) {
     std::string key = req.target; 
 
@@ -48,7 +52,7 @@ void ProxySpace::Proxy::HandleRequest(const httplib::Request &req, httplib::Resp
         key = "/"; 
     }
 
-    std::cout << "There is a request for path: " << key << "\n";
+    LogMessage("Received request for " + key);
 
     if (MatchesEndpoint(key, res)) {
         // Do not cache results from endpoint requests.
@@ -170,7 +174,7 @@ void ProxySpace::Proxy::StartServer() {
 
 // It is possible for the max age to be 0.
 std::optional<int> ProxySpace::Proxy::ParseMaxAge(const std::string& cache_control) {
-    std::cout << "Cache control is: " << cache_control << "\n";
+    LogMessage("Received cache control: " + cache_control);
     std::stringstream ss(cache_control);
     std::string directive;
 

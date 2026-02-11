@@ -1,61 +1,37 @@
 #include "httplib.h"
 #include "Proxy.hpp"
+#include <fstream>
+#include <nlohmann/json.hpp>
 
-// This is only needed for the initial creation, so I defined it here.
-ProxySpace::ProxyConfig ParseArgs(int argc, char *argv[]) {
-    ProxySpace::ProxyConfig config;
-    int i{1};
-
-    using CommandFunc = std::function<void()>;
-    std::unordered_map<std::string, CommandFunc> commands = {
-        {"--port", [&]() {
-            config.port = std::stoi(argv[++i]);
-        }},
-        {"--origin-url", [&]() {
-            std::string base_url = argv[++i];
-            std::string ignore = "https://";
-
-            if (base_url.starts_with(ignore)) {
-                base_url = base_url.substr(ignore.size(), base_url.size() - ignore.size());
-            }
-
-            config.origin_url = base_url;
-        }},
-        {"--cache-size", [&]() {
-            config.cache_size = std::stoi(argv[++i]);
-        }},
-        {"--ttl", [&]() {
-            config.ttl = std::stoi(argv[++i]);
-        }},
-    };
-
-    while (i < argc) {
-        std::string command = argv[i];
-
-        if (!commands.contains(command)) {
-            throw std::runtime_error("Invalid command: " + command + "!");
-        }
-
-        commands[command]();
-        i++;
-    }
-
-    assert(("Port number must be > 0", config.port > 0));
-    assert(("Cache size must be > 0", config.cache_size > 0));
-    assert(("TTL must be > 0", config.ttl > 0));
-    assert(("Origin url must be non-empty", !config.origin_url.empty()));
-
-    return config;
-}
-
-int main(int argc, char *argv[])
+int main()
 {
-    if (argc < 5) {
-        std::cout << "Usage: proxy --port <port> --origin-url <url>\n";
-        return 1;   
+    std::ifstream config_file("cache_config.json");
+
+    if (!config_file.is_open()) {
+        throw std::runtime_error("Could not open config file!");
     }
 
-    ProxySpace::ProxyConfig config = ParseArgs(argc, argv);
-    ProxySpace::Proxy proxy{config};
-    proxy.StartServer();
+    using json = nlohmann::json;
+    json results = json::parse(config_file);
+    std::vector<std::thread> threads;
+
+    for (const auto& [key, value] : results.items()) {
+        ProxySpace::ProxyConfig config;
+        config.port = value["port"];
+        config.origin_url = value["origin-url"];
+        config.cache_size = value["cache-size"];
+        config.ttl = value["ttl"];
+
+        std::cout << "Creating proxy with port: " << config.port << ", origin url: " << config.origin_url 
+            << ", cache size: " << config.cache_size << ", ttl: " << config.ttl << "\n";
+
+        threads.emplace_back([config]() {
+            ProxySpace::Proxy proxy{config};
+            proxy.StartServer();
+        });
+    }
+
+    for (auto& thread : threads) {
+        thread.join();
+    }
 }
