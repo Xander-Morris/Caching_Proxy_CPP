@@ -74,11 +74,21 @@ void ProxySpace::Proxy::HandleRequest(const httplib::Request &req, httplib::Resp
     headers.insert({"Host", config.origin_url});
     headers.insert({"Connection", "close"});
 
+    std::string origin_host = SelectOrigin(key);
+    std::cout << "Selected origin: " << origin_host << " for request path: " << key << "\n";
+
+    if (!clients.contains(origin_host)) {
+        res.status = 502;
+        res.set_content("Proxy error: unknown origin", "text/plain");
+        return;
+    }
+
+    auto cli = clients.at(origin_host).get();
     std::string body;
     bool too_large = false;
 
     auto origin_res = cli->Get(
-        req.target.c_str(),
+        key.c_str(),
         headers,
         [&](const char* data, size_t data_length) {
             constexpr size_t MAX_RESPONSE_SIZE = 2 * 1024 * 1024;
@@ -107,10 +117,10 @@ void ProxySpace::Proxy::HandleRequest(const httplib::Request &req, httplib::Resp
     }
 
     std::optional<int> max_age;
-    auto it = origin_res->headers.find("Cache-Control");
+    auto cache_it = origin_res->headers.find("Cache-Control");
 
-    if (it != origin_res->headers.end()) {
-        max_age = ParseMaxAge(it->second);
+    if (cache_it != origin_res->headers.end()) {
+        max_age = ParseMaxAge(cache_it->second);
     }
 
     res.status = origin_res->status;
@@ -223,4 +233,14 @@ std::optional<int> ProxySpace::Proxy::ParseMaxAge(const std::string& cache_contr
     }
 
     return std::nullopt;
+}
+
+std::string ProxySpace::Proxy::SelectOrigin(const std::string& path) const {
+    for (const auto& route : config.routes) {
+        if (path.rfind(route.prefix, 0) == 0) {
+            return route.origin;
+        }
+    }
+
+    return config.origin_url; // default
 }

@@ -3,11 +3,17 @@
         "port": 8100,
         "origin-url": "httpbin.org",
         "cache-size": 100,
-        "ttl": 5
+        "ttl": 5,
+        "routes": [
+            {
+                "prefix": "/wiki",
+                "origin": "www.wikipedia.org"
+            }
+        ]
     },
     "2": {
         "port": 9090,
-        "origin-url": "www.roblox.com",
+        "origin-url": "en.wikipedia.org",
         "cache-size": 50,
         "ttl": 10
     }

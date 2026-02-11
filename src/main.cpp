@@ -36,6 +36,20 @@ int main()
         config.cache_size = value["cache-size"];
         config.ttl = value["ttl"];
 
+        // Add the routes
+        if (value.contains("routes")) {
+            for (const auto& route : value["routes"]) {
+                if (!route.contains("prefix") || !route.contains("origin")) {
+                    throw std::runtime_error("Route config is missing required fields!");
+                }
+
+                ProxySpace::RouteConfig route_config;
+                route_config.prefix = route["prefix"];
+                route_config.origin = route["origin"];
+                config.routes.push_back(route_config);
+            }
+        }
+
         std::cout << "Creating proxy with port: " << config.port << ", origin url: " << config.origin_url 
             << ", cache size: " << config.cache_size << ", ttl: " << config.ttl << "\n";
 
