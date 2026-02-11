@@ -74,12 +74,35 @@ void ProxySpace::Proxy::HandleRequest(const httplib::Request &req, httplib::Resp
     headers.insert({"Host", config.origin_url});
     headers.insert({"Connection", "close"});
 
-    auto origin_res = cli->Get(req.target.c_str(), headers);
+    std::string body;
+    bool too_large = false;
+
+    auto origin_res = cli->Get(
+        req.target.c_str(),
+        headers,
+        [&](const char* data, size_t data_length) {
+            constexpr size_t MAX_RESPONSE_SIZE = 2 * 1024 * 1024;
+
+            if (body.size() + data_length > MAX_RESPONSE_SIZE) {
+                too_large = true;
+                return false; // abort download
+            }
+
+            body.append(data, data_length);
+            return true;
+        }
+    );
 
     if (!origin_res) {
         std::string error_msg = "Proxy error: " + httplib::to_string(origin_res.error());
         res.status = 502;
         res.set_content(error_msg, "text/plain");
+        return;
+    }
+
+    if (too_large) {
+        res.status = 413;
+        res.set_content("Origin response too large", "text/plain");
         return;
     }
 
@@ -165,6 +188,7 @@ void ProxySpace::Proxy::StartServer() {
         HandleRequest(req, res);
     });
 
+    svr.set_payload_max_length(1 * 1024 * 1024); // 1 MB limit for request bodies
     bool started = svr.listen("localhost", config.port, /*use_multithread=*/true);
 
     if (!started) {
