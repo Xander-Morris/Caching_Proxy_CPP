@@ -45,13 +45,94 @@ void ProxySpace::Proxy::LogMessage(const std::string &message) {
     std::cout << "[PORT " << config.port << "] " << message << "\n";
 }
 
-void ProxySpace::Proxy::HandleRequest(const httplib::Request &req, httplib::Response &res) {
-    std::string key = req.target; 
+// Returns true if we handled the request completely.
+bool ProxySpace::Proxy::CheckCacheForResponse(const std::string &key, httplib::Response &res) {
+    if (!cache.HasUrl(key)) return false;
 
-    if (key.empty()) { 
-        key = "/"; 
+    auto cached = cache.get(key);
+    int now = cache.GetCurrentSeconds();
+
+    if (cached.expires_at < now) {
+        httplib::Headers headers;
+        headers.insert({"Host", config.origin_url});
+        headers.insert({"Connection", "close"});
+
+        if (cached.headers.contains("ETag")) {
+            auto it = cached.headers.find("ETag");
+
+            if (it != cached.headers.end()) {
+                headers.insert({"If-None-Match", it->second});
+            }
+        }
+
+        if (cached.headers.contains("Last-Modified")) {
+            auto it = cached.headers.find("Last-Modified");
+            
+            if (it != cached.headers.end()) {
+                headers.insert({"If-Modified-Since", it->second});
+            }
+        }
+
+        auto origin_res = clients.at(config.origin_url)->Get(key.c_str(), headers);
+
+        if (!origin_res) {
+            res.status = 502;
+            res.set_content("Proxy error: conditional request failed", "text/plain");
+            return true;
+        }
+
+        if (origin_res->status == 304) {
+            cached.expires_at = now + config.ttl;
+            cache.put(key, cached);
+
+            res.status = cached.status;
+            res.headers = cached.headers;
+            res.body = cached.body;
+            res.headers.insert({"X-Cache", "HIT (revalidated)"});
+            return true;
+        }
+    } else {
+        res.status = cached.status;
+        res.headers = cached.headers;
+        res.body = cached.body;
+        res.headers.insert({"X-Cache", "HIT"});
+        return true;
     }
 
+    return false;
+}
+
+std::string ProxySpace::Proxy::MakeCacheKey(const httplib::Request& req) const {
+    std::string key = req.target;
+
+    if (key.empty()) { 
+        key = "/";
+        return key; 
+    }
+
+    auto vary_it = req.headers.find("Vary");
+
+    if (vary_it != req.headers.end()) {
+        std::string vary_headers = vary_it->second;
+        std::stringstream ss(vary_headers);
+        std::string header_name;
+
+        while (std::getline(ss, header_name, ',')) {
+            header_name.erase(0, header_name.find_first_not_of(" \t"));
+            header_name.erase(header_name.find_last_not_of(" \t") + 1);
+            auto hdr_it = req.headers.find(header_name);
+
+            if (hdr_it != req.headers.end()) {
+                key += "|" + header_name + "=" + hdr_it->second;
+            }
+        }
+    }
+
+    return key;
+}
+
+void ProxySpace::Proxy::HandleRequest(const httplib::Request &req, httplib::Response &res) {
+    std::string key = MakeCacheKey(req);
     LogMessage("Received request for " + key);
 
     if (MatchesEndpoint(key, res)) {
@@ -59,14 +140,8 @@ void ProxySpace::Proxy::HandleRequest(const httplib::Request &req, httplib::Resp
         return;
     }
 
-    if (cache.HasUrl(key)) {
-        const auto &cached = cache.get(key);
-        res.status = cached.status;
-        res.headers = cached.headers; 
-        res.body = cached.body;
-
+    if (CheckCacheForResponse(key, res)) {
         cache.LogEvent(key, true);
-
         return;
     }
 
@@ -90,18 +165,28 @@ void ProxySpace::Proxy::HandleRequest(const httplib::Request &req, httplib::Resp
     auto origin_res = cli->Get(
         key.c_str(),
         headers,
-        [&](const char* data, size_t data_length) {
+        [&](const char* data, size_t length) {
             constexpr size_t MAX_RESPONSE_SIZE = 2 * 1024 * 1024;
 
-            if (body.size() + data_length > MAX_RESPONSE_SIZE) {
+            if (body.size() + length > MAX_RESPONSE_SIZE) {
                 too_large = true;
                 return false; // abort download
             }
 
-            body.append(data, data_length);
+            body.append(data, length);
             return true;
         }
     );
+
+    if (!origin_res) {
+        res.status = 502;
+        res.set_content("Proxy error: failed to get origin", "text/plain");
+        return;
+    }
+
+    res.status = origin_res->status;
+    res.body = body;
+    res.headers = origin_res->headers;
 
     if (!origin_res) {
         std::string error_msg = "Proxy error: " + httplib::to_string(origin_res.error());
@@ -125,33 +210,19 @@ void ProxySpace::Proxy::HandleRequest(const httplib::Request &req, httplib::Resp
 
     res.status = origin_res->status;
     res.body = origin_res->body;
-
-    static const std::unordered_set<std::string> hop_by_hop = {
-        "connection",
-        "keep-alive",
-        "proxy-authenticate",
-        "proxy-authorization",
-        "te",
-        "trailer",
-        "transfer-encoding",
-        "upgrade",
-        "content-length"
-    };
-
     res.headers.clear();
-
     httplib::Headers filtered_headers;
+
     for (const auto& [key, value] : origin_res->headers) {
         std::string lower = key;
         std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
 
-        if (!hop_by_hop.contains(lower)) {
+        if (!ProxySpace::hop_by_hop.contains(lower)) {
             filtered_headers.insert({key, value});
         }
     }
 
     filtered_headers.insert({"Content-Length", std::to_string(res.body.size())});
-
     res.headers = filtered_headers;
     res.headers.insert({"X-Cache", "MISS"});
     int now = cache.GetCurrentSeconds();
@@ -181,12 +252,8 @@ void ProxySpace::Proxy::TTLFunction() {
     const int interval = 1000;
 
     while (true) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(interval));
-        const int current_seconds = cache.GetCurrentSeconds();
-        
-        while (cache.CheckHeapTop()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(interval));
-        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(interval));        
+        while (cache.CheckHeapTop()) {}
     }
 }
 

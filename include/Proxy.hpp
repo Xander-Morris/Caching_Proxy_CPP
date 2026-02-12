@@ -12,6 +12,18 @@ namespace ProxySpace {
         std::string origin; 
     };
 
+    static const std::unordered_set<std::string> hop_by_hop = {
+        "connection",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailer",
+        "transfer-encoding",
+        "upgrade",
+        "content-length"
+    };
+
     struct ProxyConfig {
         int port{9090};
         std::string origin_url; // default
@@ -31,7 +43,7 @@ namespace ProxySpace {
             const auto create_client = [&](const std::string &origin) {
                 HttpClient client = std::make_unique<httplib::SSLClient>(origin.c_str());
                 client->enable_server_certificate_verification(true); // ensures HTTPS works
-                client->set_keep_alive(false);
+                client->set_keep_alive(true);
                 client->set_read_timeout(5, 0);
                 client->set_connection_timeout(5, 0);
 
@@ -45,7 +57,9 @@ namespace ProxySpace {
                 std::cout << "Created client for route prefix: " << route.prefix << ", origin: " << route.origin << "\n";
             }
         }
+        std::string MakeCacheKey(const httplib::Request&) const;
         void StartServer();
+        bool CheckCacheForResponse(const std::string &, httplib::Response &res);
         void HandleRequest(const httplib::Request&, httplib::Response&);
         bool MatchesEndpoint(const std::string&, httplib::Response&);
         std::optional<int> ParseMaxAge(const std::string&);
