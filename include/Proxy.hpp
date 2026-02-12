@@ -32,7 +32,7 @@ namespace ProxySpace {
         std::vector<ProxySpace::RouteConfig> routes; 
     }; 
 
-    const std::array<std::string_view, 5> PROXY_FIELDS = {
+    static const std::array<std::string_view, 5> PROXY_FIELDS = {
         "port", "origin_url", "cache_size", "ttl",
     };
     using HttpClient = std::unique_ptr<httplib::SSLClient>;
