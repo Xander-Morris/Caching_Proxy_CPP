@@ -40,7 +40,7 @@ int main()
         if (value.contains("routes")) {
             for (const auto& route : value["routes"]) {
                 if (!route.contains("prefix") || !route.contains("origin")) {
-                    throw std::runtime_error("Route config is missing required fields!");
+                    std::cout << "Route config is missing required fields!\n";
                 }
 
                 ProxySpace::RouteConfig route_config;
@@ -52,6 +52,11 @@ int main()
 
         std::cout << "Creating proxy with port: " << config.port << ", origin url: " << config.origin_url 
             << ", cache size: " << config.cache_size << ", ttl: " << config.ttl << "\n";
+        std::cout << "Routes:\n";
+
+        for (const auto& route : config.routes) {
+            std::cout << "Route prefix: " << route.prefix << ", origin: " << route.origin << "\n";
+        }
 
         threads.emplace_back([config]() {
             ProxySpace::Proxy proxy{config};

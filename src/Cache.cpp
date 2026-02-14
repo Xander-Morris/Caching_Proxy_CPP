@@ -34,7 +34,6 @@ void CacheSpace::Cache::put(const std::string &url, const CachedResponse &cached
     cache_map[url] = cache_list.begin();
 }
 
-// This is not currently called anywhere, but I have it here just in case. 
 void CacheSpace::Cache::clear() {
     std::unique_lock<std::shared_mutex> lock(mtx);
     cache_list.clear();
@@ -47,7 +46,6 @@ void CacheSpace::Cache::clear() {
     }
 }
 
-// No lock is needed here.
 void CacheSpace::Cache::IncrementURLHitsOrMisses(const std::string& key, bool is_hit) {
     std::unique_lock<std::shared_mutex> lock(mtx);
 
@@ -69,35 +67,35 @@ int CacheSpace::Cache::GetCurrentSeconds() {
     return seconds_since_epoch;
 }
 
-void CacheSpace::Cache::Evict(const std::string &key) {
-    if (min_heap.size() <= 0) return;
-
-    std::lock_guard<std::shared_mutex> lock(mtx);
-    auto p = min_heap.top();
-
-    if (p.first == key) {
-        min_heap.pop();
-    }
-
-    if (cache_map.contains(p.first)) {
-        cache_map.erase(p.first);
-    }
-
-    auto MatchesP = [&](const CACHE_PAIR &cp) {
-        return cp.first == p.first;
-    };
-
-    cache_list.remove_if(MatchesP);
-    std::cout << *this;
-}
-
 bool CacheSpace::Cache::CheckHeapTop() {
     if (min_heap.size() <= 0) return false;
     if (GetCurrentSeconds() < min_heap.top().second) return false;
 
-    Evict(min_heap.top().first);
+    std::unique_lock lock(mtx);
 
-    return true;
+    while (!min_heap.empty()) {
+        auto [url, expires_at] = min_heap.top();
+
+        auto it = cache_map.find(url);
+
+        if (it == cache_map.end() || it->second->second.expires_at != expires_at) {
+            min_heap.pop();
+            continue;
+        }
+
+        int now = GetCurrentSeconds();
+        if (now < expires_at) {
+            return false;
+        }
+
+        cache_list.erase(it->second);   
+        cache_map.erase(it);       
+        min_heap.pop();
+
+        return true;
+    }
+
+    return false;
 }
 
 void CacheSpace::Cache::LogEvent(const std::string &url, bool hit) {    

@@ -44,7 +44,6 @@ namespace CacheSpace {
         void IncrementCompliantMisses() {
             compliant_misses.fetch_add(1, std::memory_order_relaxed);
         }
-        void Evict(const std::string&);
         int GetHits() const { return hits.load(std::memory_order_relaxed); }
         int GetMisses() const { return misses.load(std::memory_order_relaxed); }
         int GetCompliantMisses() const { return compliant_misses.load(std::memory_order_relaxed); }

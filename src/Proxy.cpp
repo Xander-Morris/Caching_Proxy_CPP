@@ -1,42 +1,92 @@
 #include "Proxy.hpp"
+#include <nlohmann/json.hpp>
 
-bool ProxySpace::Proxy::MatchesEndpoint(const std::string &key, httplib::Response &res) {
-    using CommandFunc = std::function<void()>;
-    std::unordered_map<std::string, CommandFunc> commands = {
-        {"/stats", [&]() {
-            auto hits_and_misses = cache.GetURLHitsAndMisses();
+void ProxySpace::Proxy::BuildClients() {
+    const auto create_client = [&](const std::string &origin) {
+        HttpClient client = std::make_unique<httplib::SSLClient>(origin.c_str());
+        client->enable_server_certificate_verification(true); // ensures HTTPS works
+        client->set_keep_alive(true);
+        client->set_read_timeout(5, 0);
+        client->set_connection_timeout(5, 0);
 
-            if (hits_and_misses.size() == 0 && cache.GetCompliantMisses() == 0) {
-                res.set_content(
-                    "No cache activity yet.\n",
-                    "text/plain"
-                );
-                return;
-            }
-
-            std::string per_url_info = "";
-
-            for (const auto& pair : hits_and_misses) {
-                std::string append = pair.first + ": Hits: " 
-                    + std::to_string(pair.second.first) + ", Misses: " + std::to_string(pair.second.second) + "\n"; 
-                per_url_info += append;
-            }
-
-            res.set_content(
-                "Hits: " + std::to_string(cache.GetHits()) + "\nMisses: " + std::to_string(cache.GetMisses()) + "\n" 
-                + "Compliant Misses: " + std::to_string(cache.GetCompliantMisses()) + "\n"
-                + "Hits and misses (non-compliant) broken down by url:\n" + per_url_info, 
-                "text/plain"
-            );
-        }},
-        {"/favicon.ico", [&]() { /* Do nothing for this since we don't need a favicon. */ }},
+        return client;
     };
 
-    if (!commands.contains(key)) {
-        return false;
+    clients[config.origin_url] = create_client(config.origin_url);
+    
+    for (const auto& route : config.routes) {
+        clients[route.origin] = create_client(route.origin);
+        std::cout << "Created client for route prefix: " << route.prefix << ", origin: " << route.origin << "\n";
     }
+}
 
-    commands[key]();
+void ProxySpace::Proxy::BuildEndpoints() {
+    endpoints["/stats"] = [this](const httplib::Request& req, httplib::Response& res) {
+        auto accept_it = req.headers.find("Accept");
+
+        if (accept_it != req.headers.end() && accept_it->second.find("application/json") != std::string::npos) {
+            nlohmann::json j;
+            j["hits"] = cache.GetHits();
+            j["misses"] = cache.GetMisses();
+            j["compliant_misses"] = cache.GetCompliantMisses();
+            auto hits_and_misses = cache.GetURLHitsAndMisses();
+            nlohmann::json url_info;
+
+            for (const auto& pair : hits_and_misses) {
+                url_info[pair.first] = {
+                    {"hits", pair.second.first},
+                    {"misses", pair.second.second}
+                };
+            }
+
+            j["url_hits_and_misses"] = url_info;
+            res.set_content(j.dump(4), "application/json");
+
+            return;
+        }
+
+        auto hits_and_misses = cache.GetURLHitsAndMisses();
+
+        if (hits_and_misses.empty() && cache.GetCompliantMisses() == 0) {
+            res.set_content("No cache activity yet.\n", "text/plain");
+            return;
+        }
+
+        std::string per_url_info;
+
+        for (const auto& pair : hits_and_misses) {
+            per_url_info += pair.first + ": Hits: "
+                + std::to_string(pair.second.first)
+                + ", Misses: " + std::to_string(pair.second.second) + "\n";
+        }
+
+        res.set_content(
+            "Hits: " + std::to_string(cache.GetHits()) + "\n"
+            "Misses: " + std::to_string(cache.GetMisses()) + "\n"
+            "Compliant Misses: " + std::to_string(cache.GetCompliantMisses()) + "\n"
+            "Hits and misses (non-compliant) broken down by url:\n" + per_url_info,
+            "text/plain"
+        );
+    };
+
+    endpoints["/clear-cache"] = [this](const httplib::Request&, httplib::Response& res) {
+        cache.clear();
+        res.set_content("Cache cleared.\n", "text/plain");
+    };
+
+    endpoints["/healthz"] = [this](const httplib::Request&, httplib::Response& res) {
+        res.set_content("OK", "text/plain");
+    };
+
+    // no-op
+    endpoints["/favicon.ico"] = [this](const httplib::Request&, httplib::Response&) {};
+}
+
+bool ProxySpace::Proxy::MatchesEndpoint(const std::string &key, const httplib::Request &req, httplib::Response &res) {
+    auto it = endpoints.find(key);
+    if (it == endpoints.end()) return false;
+
+    it->second(req, res);
 
     return true;
 }
@@ -73,7 +123,7 @@ bool ProxySpace::Proxy::CheckCacheForResponse(const std::string &key, httplib::R
             }
         }
 
-        auto origin_res = clients.at(config.origin_url)->Get(key.c_str(), headers);
+        auto origin_res = clients.at(SelectOrigin(key))->Get(key.c_str(), headers);
 
         if (!origin_res) {
             res.status = 502;
@@ -135,7 +185,7 @@ void ProxySpace::Proxy::HandleRequest(const httplib::Request &req, httplib::Resp
     std::string key = MakeCacheKey(req);
     LogMessage("Received request for " + key);
 
-    if (MatchesEndpoint(key, res)) {
+    if (MatchesEndpoint(key, req, res)) {
         // Do not cache results from endpoint requests.
         return;
     }
@@ -148,7 +198,6 @@ void ProxySpace::Proxy::HandleRequest(const httplib::Request &req, httplib::Resp
     httplib::Headers headers;
     headers.insert({"Host", config.origin_url});
     headers.insert({"Connection", "close"});
-
     std::string origin_host = SelectOrigin(key);
     std::cout << "Selected origin: " << origin_host << " for request path: " << key << "\n";
 
@@ -177,16 +226,6 @@ void ProxySpace::Proxy::HandleRequest(const httplib::Request &req, httplib::Resp
             return true;
         }
     );
-
-    if (!origin_res) {
-        res.status = 502;
-        res.set_content("Proxy error: failed to get origin", "text/plain");
-        return;
-    }
-
-    res.status = origin_res->status;
-    res.body = body;
-    res.headers = origin_res->headers;
 
     if (!origin_res) {
         std::string error_msg = "Proxy error: " + httplib::to_string(origin_res.error());

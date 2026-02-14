@@ -12,6 +12,14 @@ namespace ProxySpace {
         std::string origin; 
     };
 
+    struct ProxyConfig {
+        int port{9090};
+        std::string origin_url; // default
+        int cache_size{15};
+        int ttl{4}; // in seconds
+        std::vector<ProxySpace::RouteConfig> routes; 
+    }; 
+
     static const std::unordered_set<std::string> hop_by_hop = {
         "connection",
         "keep-alive",
@@ -24,49 +32,31 @@ namespace ProxySpace {
         "content-length"
     };
 
-    struct ProxyConfig {
-        int port{9090};
-        std::string origin_url; // default
-        int cache_size{15};
-        int ttl{4}; // in seconds
-        std::vector<ProxySpace::RouteConfig> routes; 
-    }; 
-
     static const std::array<std::string_view, 5> PROXY_FIELDS = {
         "port", "origin_url", "cache_size", "ttl",
     };
     using HttpClient = std::unique_ptr<httplib::SSLClient>;
+    using CommandFunc = std::function<void(const httplib::Request&, httplib::Response&)>;
 
     class Proxy {
     public:
         explicit Proxy(const ProxyConfig &config) : config(config), cache(config.cache_size, config.ttl) {
-            const auto create_client = [&](const std::string &origin) {
-                HttpClient client = std::make_unique<httplib::SSLClient>(origin.c_str());
-                client->enable_server_certificate_verification(true); // ensures HTTPS works
-                client->set_keep_alive(true);
-                client->set_read_timeout(5, 0);
-                client->set_connection_timeout(5, 0);
-
-                return client;
-            };
-
-            clients[config.origin_url] = create_client(config.origin_url);
-            
-            for (const auto& route : config.routes) {
-                clients[route.origin] = create_client(route.origin);
-                std::cout << "Created client for route prefix: " << route.prefix << ", origin: " << route.origin << "\n";
-            }
+            BuildClients();
+            BuildEndpoints();
         }
         std::string MakeCacheKey(const httplib::Request&) const;
         void StartServer();
+        void BuildClients();
+        void BuildEndpoints();
         bool CheckCacheForResponse(const std::string &, httplib::Response &res);
         void HandleRequest(const httplib::Request&, httplib::Response&);
-        bool MatchesEndpoint(const std::string&, httplib::Response&);
+        bool MatchesEndpoint(const std::string&, const httplib::Request&, httplib::Response&);
         std::optional<int> ParseMaxAge(const std::string&);
         void LogMessage(const std::string&);
         std::string SelectOrigin(const std::string&) const;
 
     private:
+        std::unordered_map<std::string, CommandFunc> endpoints;
         void TTLFunction();
         CacheSpace::Cache cache;
         ProxyConfig config;
