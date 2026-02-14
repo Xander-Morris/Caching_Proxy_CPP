@@ -138,14 +138,14 @@ bool ProxySpace::Proxy::CheckCacheForResponse(const std::string &key, httplib::R
             res.status = cached.status;
             res.headers = cached.headers;
             res.body = cached.body;
-            res.headers.insert({"X-Cache", "HIT (revalidated)"});
+
             return true;
         }
     } else {
         res.status = cached.status;
         res.headers = cached.headers;
         res.body = cached.body;
-        res.headers.insert({"X-Cache", "HIT"});
+        
         return true;
     }
 
