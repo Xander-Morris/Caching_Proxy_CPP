@@ -68,14 +68,10 @@ int CacheSpace::Cache::GetCurrentSeconds() {
 }
 
 bool CacheSpace::Cache::CheckHeapTop() {
-    if (min_heap.size() <= 0) return false;
-    if (GetCurrentSeconds() < min_heap.top().second) return false;
-
     std::unique_lock lock(mtx);
 
     while (!min_heap.empty()) {
         auto [url, expires_at] = min_heap.top();
-
         auto it = cache_map.find(url);
 
         if (it == cache_map.end() || it->second->second.expires_at != expires_at) {
@@ -84,12 +80,13 @@ bool CacheSpace::Cache::CheckHeapTop() {
         }
 
         int now = GetCurrentSeconds();
+
         if (now < expires_at) {
-            return false;
+            return false; 
         }
 
-        cache_list.erase(it->second);   
-        cache_map.erase(it);       
+        cache_list.erase(it->second);
+        cache_map.erase(it);
         min_heap.pop();
 
         return true;
