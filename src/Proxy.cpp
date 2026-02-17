@@ -297,8 +297,7 @@ void ProxySpace::Proxy::TTLFunction() {
 }
 
 void ProxySpace::Proxy::StartServer() {
-    std::thread ttl_thread(&ProxySpace::Proxy::TTLFunction, this);
-    ttl_thread.detach();
+    ttl_thread = std::thread(&ProxySpace::Proxy::TTLFunction, this);
 
     svr.Get("/.*", [&](const httplib::Request &req, httplib::Response &res) {
         HandleRequest(req, res);
