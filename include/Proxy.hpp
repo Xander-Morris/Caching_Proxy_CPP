@@ -44,6 +44,19 @@ namespace ProxySpace {
             BuildClients();
             BuildEndpoints();
         }
+        ~Proxy() {
+            is_running = false;
+
+            if (ttl_thread.joinable()) {
+                ttl_thread.join();
+            }
+
+            for (auto& [_, client] : clients) {
+                client->stop();
+            }
+
+            svr.stop();
+        }
         std::string MakeCacheKey(const httplib::Request&) const;
         void StartServer();
         void BuildClients();
@@ -58,10 +71,12 @@ namespace ProxySpace {
     private:
         std::unordered_map<std::string, CommandFunc> endpoints;
         void TTLFunction();
+        std::thread ttl_thread;
         CacheSpace::Cache cache;
         ProxyConfig config;
         std::unordered_map<std::string, ProxySpace::HttpClient> clients;
         httplib::Server svr;
+        bool is_running = true;
     };
 }
 

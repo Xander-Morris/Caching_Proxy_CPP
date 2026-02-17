@@ -290,7 +290,7 @@ void ProxySpace::Proxy::HandleRequest(const httplib::Request &req, httplib::Resp
 void ProxySpace::Proxy::TTLFunction() {
     const int interval = 1000;
 
-    while (true) {
+    while (is_running) {
         std::this_thread::sleep_for(std::chrono::milliseconds(interval));        
         while (cache.CheckHeapTop()) {}
     }
