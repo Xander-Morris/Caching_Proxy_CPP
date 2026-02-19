@@ -97,32 +97,30 @@ void ProxySpace::Proxy::LogMessage(const std::string &message) {
 
 // Returns true if we handled the request completely.
 bool ProxySpace::Proxy::CheckCacheForResponse(const std::string &key, httplib::Response &res) {
-    if (!cache.HasUrl(key)) return false;
-
-    auto cached = cache.get_ref(key);
+    auto cached = cache.get(key);
     int now = cache.GetCurrentSeconds();
 
-    if (!cached.has_value()) {
+    if (!cached) {
         return false;
     }
 
-    if (cached.value().get().expires_at < now) {
+    if (cached->expires_at < now) {
         httplib::Headers headers;
         headers.insert({"Host", config.origin_url});
         headers.insert({"Connection", "close"});
 
-        if (cached.value().get().headers.contains("ETag")) {
-            auto it = cached.value().get().headers.find("ETag");
+        if (cached->headers.contains("ETag")) {
+            auto it = cached->headers.find("ETag");
 
-            if (it != cached.value().get().headers.end()) {
+            if (it != cached->headers.end()) {
                 headers.insert({"If-None-Match", it->second});
             }
         }
 
-        if (cached.value().get().headers.contains("Last-Modified")) {
-            auto it = cached.value().get().headers.find("Last-Modified");
+        if (cached->headers.contains("Last-Modified")) {
+            auto it = cached->headers.find("Last-Modified");
             
-            if (it != cached.value().get().headers.end()) {
+            if (it != cached->headers.end()) {
                 headers.insert({"If-Modified-Since", it->second});
             }
         }
@@ -136,19 +134,19 @@ bool ProxySpace::Proxy::CheckCacheForResponse(const std::string &key, httplib::R
         }
 
         if (origin_res->status == 304) {
-            cached.value().get().expires_at = now + config.ttl;
-            cache.put(key, cached.value().get());
+            cached->expires_at = now + config.ttl;
+            cache.put(key, *cached);
 
-            res.status = cached.value().get().status;
-            res.headers = cached.value().get().headers;
-            res.body = cached.value().get().body;
+            res.status = cached->status;
+            res.headers = cached->headers;
+            res.body = cached->body;
 
             return true;
         }
     } else {
-        res.status = cached.value().get().status;
-        res.headers = cached.value().get().headers;
-        res.body = cached.value().get().body;
+        res.status = cached->status;
+        res.headers = cached->headers;
+        res.body = cached->body;
         
         return true;
     }

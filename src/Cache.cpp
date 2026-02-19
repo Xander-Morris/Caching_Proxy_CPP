@@ -1,47 +1,44 @@
 #include "Cache.hpp"
 #include <chrono>
 
-std::optional<std::reference_wrapper<CacheSpace::CachedResponse>> CacheSpace::Cache::get_ref(const std::string& url) {
-    {
-        std::shared_lock lock(mtx);
-        auto it = cache_map.find(url);
+std::shared_ptr<CacheSpace::CachedResponse> CacheSpace::Cache::get(const std::string& url) {
+    std::unique_lock lock(mtx); 
 
-        if (it == cache_map.end()) {
-            return {};
-        }
-    }
-    
-    std::unique_lock lock(mtx);
     auto it = cache_map.find(url);
 
     if (it == cache_map.end()) {
-        return {};
+        return nullptr;
     }
 
     cache_list.splice(cache_list.begin(), cache_list, it->second);
 
-    return std::optional<std::reference_wrapper<CachedResponse>>(it->second->second);
+    return it->second->second; 
 }
 
-void CacheSpace::Cache::put(const std::string &url, const CachedResponse &cached) {
+void CacheSpace::Cache::put(const std::string& url, const CachedResponse& cached) {
     std::unique_lock lock(mtx);
 
-    if (cache_map.find(url) != cache_map.end()) {
-        cache_map[url]->second = cached;
-        cache_list.splice(cache_list.begin(), cache_list, cache_map[url]);
+    auto it = cache_map.find(url);
 
-        return;
+    if (it != cache_map.end()) {
+        it->second->second = std::make_shared<CachedResponse>(cached);
+        cache_list.splice(cache_list.begin(), cache_list, it->second);
+    } else {
+        if (cache_list.size() >= capacity) {
+            auto& last = cache_list.back();
+            cache_map.erase(last.first);
+            cache_list.pop_back();
+        }
+
+        cache_list.emplace_front(
+            url,
+            std::make_shared<CachedResponse>(cached)
+        );
+
+        cache_map[url] = cache_list.begin();
     }
 
-    if (cache_list.size() >= capacity) {
-        std::string last_key = cache_list.back().first;
-        cache_map.erase(last_key);
-        cache_list.pop_back();
-    }
-
-    cache_list.push_front({url, cached});
     min_heap.push({url, cached.expires_at});
-    cache_map[url] = cache_list.begin();
 }
 
 void CacheSpace::Cache::clear() {
@@ -85,7 +82,7 @@ bool CacheSpace::Cache::CheckHeapTop() {
         auto [url, expires_at] = min_heap.top();
         auto it = cache_map.find(url);
 
-        if (it == cache_map.end() || it->second->second.expires_at != expires_at) {
+        if (it == cache_map.end() || it->second->second->expires_at != expires_at) {
             min_heap.pop();
             continue;
         }

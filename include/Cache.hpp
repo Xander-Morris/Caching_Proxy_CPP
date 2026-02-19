@@ -17,7 +17,7 @@ namespace CacheSpace {
         std::string body;
     };
 
-    using CACHE_PAIR = std::pair<std::string, CachedResponse>;
+    using CACHE_PAIR = std::pair<std::string, std::shared_ptr<CachedResponse>>;
     using PQ_PAIR = std::pair<std::string, int>; // url, expire time
     using HITS_AND_MISSES_PAIR = std::pair<long long, long long>;
 
@@ -25,11 +25,7 @@ namespace CacheSpace {
     public:
         Cache(int capacity, int ttl_seconds) : capacity(capacity), ttl_seconds(ttl_seconds) {}
 
-        bool HasUrl(const std::string &url) {
-            std::shared_lock lock(mtx);
-            return cache_map.find(url) != cache_map.end();
-        }
-        std::optional<std::reference_wrapper<CachedResponse>> get_ref(const std::string &);
+        std::shared_ptr<CachedResponse> get(const std::string &);
         void put(const std::string &, const CachedResponse &);
 
         void IncrementURLHitsOrMisses(const std::string&, bool);
