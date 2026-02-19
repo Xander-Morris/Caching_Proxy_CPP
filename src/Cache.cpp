@@ -24,7 +24,7 @@ std::optional<std::reference_wrapper<CacheSpace::CachedResponse>> CacheSpace::Ca
 }
 
 void CacheSpace::Cache::put(const std::string &url, const CachedResponse &cached) {
-    std::unique_lock<std::shared_mutex> lock(mtx);
+    std::unique_lock lock(mtx);
 
     if (cache_map.find(url) != cache_map.end()) {
         cache_map[url]->second = cached;
@@ -45,7 +45,8 @@ void CacheSpace::Cache::put(const std::string &url, const CachedResponse &cached
 }
 
 void CacheSpace::Cache::clear() {
-    std::unique_lock<std::shared_mutex> lock(mtx);
+    std::unique_lock lock(mtx);
+
     cache_list.clear();
     cache_map.clear();
     url_hits_and_misses.clear();
@@ -57,7 +58,7 @@ void CacheSpace::Cache::clear() {
 }
 
 void CacheSpace::Cache::IncrementURLHitsOrMisses(const std::string& key, bool is_hit) {
-    std::unique_lock<std::shared_mutex> lock(mtx);
+    std::unique_lock lock(mtx);
 
     if (!url_hits_and_misses.contains(key)) {
         url_hits_and_misses[key] = {0, 0};

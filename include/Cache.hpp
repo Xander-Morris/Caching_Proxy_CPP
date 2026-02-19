@@ -26,7 +26,7 @@ namespace CacheSpace {
         Cache(int capacity, int ttl_seconds) : capacity(capacity), ttl_seconds(ttl_seconds) {}
 
         bool HasUrl(const std::string &url) {
-            std::shared_lock<std::shared_mutex> lock(mtx);
+            std::shared_lock lock(mtx);
             return cache_map.find(url) != cache_map.end();
         }
         std::optional<std::reference_wrapper<CachedResponse>> get_ref(const std::string &);
@@ -49,7 +49,7 @@ namespace CacheSpace {
         int GetCompliantMisses() const { return compliant_misses.load(std::memory_order_relaxed); }
 
         const std::unordered_map<std::string, CacheSpace::HITS_AND_MISSES_PAIR> GetURLHitsAndMisses() const {
-            std::shared_lock<std::shared_mutex> lock(mtx);
+            std::shared_lock lock(mtx);
             return url_hits_and_misses;
         }
         void clear();
