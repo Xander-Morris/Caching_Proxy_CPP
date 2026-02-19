@@ -1,16 +1,26 @@
 #include "Cache.hpp"
 #include <chrono>
 
-CacheSpace::CachedResponse CacheSpace::Cache::get(const std::string &url) {
-    std::shared_lock<std::shared_mutex> lock(mtx);
+std::optional<std::reference_wrapper<CacheSpace::CachedResponse>> CacheSpace::Cache::get_ref(const std::string& url) {
+    {
+        std::shared_lock lock(mtx);
+        auto it = cache_map.find(url);
 
-    if (cache_map.find(url) == cache_map.end()) {
-        return CachedResponse{};
+        if (it == cache_map.end()) {
+            return {};
+        }
     }
     
-    cache_list.splice(cache_list.begin(), cache_list, cache_map[url]);
+    std::unique_lock lock(mtx);
+    auto it = cache_map.find(url);
 
-    return cache_map[url]->second;
+    if (it == cache_map.end()) {
+        return {};
+    }
+
+    cache_list.splice(cache_list.begin(), cache_list, it->second);
+
+    return std::optional<std::reference_wrapper<CachedResponse>>(it->second->second);
 }
 
 void CacheSpace::Cache::put(const std::string &url, const CachedResponse &cached) {

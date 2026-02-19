@@ -29,7 +29,7 @@ namespace CacheSpace {
             std::shared_lock<std::shared_mutex> lock(mtx);
             return cache_map.find(url) != cache_map.end();
         }
-        CachedResponse get(const std::string &);
+        std::optional<std::reference_wrapper<CachedResponse>> get_ref(const std::string &);
         void put(const std::string &, const CachedResponse &);
 
         void IncrementURLHitsOrMisses(const std::string&, bool);
