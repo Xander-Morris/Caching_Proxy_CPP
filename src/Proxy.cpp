@@ -242,7 +242,7 @@ void ProxySpace::Proxy::HandleRequest(const httplib::Request &req, httplib::Resp
         return;
     }
 
-    std::optional<int> max_age;
+    std::optional<int64_t> max_age;
     auto cache_it = origin_res->headers.find("Cache-Control");
 
     if (cache_it != origin_res->headers.end()) {
