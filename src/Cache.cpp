@@ -39,6 +39,7 @@ void CacheSpace::Cache::put(const std::string& url, const CachedResponse& cached
     }
 
     min_heap.push({url, cached.expires_at});
+    ttl_cv.notify_one();
 }
 
 void CacheSpace::Cache::clear() {
@@ -65,42 +66,38 @@ void CacheSpace::Cache::IncrementURLHitsOrMisses(const std::string& key, bool is
     url_hits_and_misses[key].second += is_hit ? 0 : 1;
 }
 
-int CacheSpace::Cache::GetCurrentSeconds() {
+int64_t CacheSpace::Cache::GetCurrentSeconds() {
     auto now = std::chrono::system_clock::now();
 
-    auto seconds_since_epoch = std::chrono::duration_cast<std::chrono::seconds>(
+    return std::chrono::duration_cast<std::chrono::seconds>(
         now.time_since_epoch()
     ).count();
-
-    return seconds_since_epoch;
 }
 
 bool CacheSpace::Cache::CheckHeapTop() {
     std::unique_lock lock(mtx);
 
-    while (!min_heap.empty()) {
-        auto [url, expires_at] = min_heap.top();
-        auto it = cache_map.find(url);
+    if (min_heap.empty()) return false;
 
-        if (it == cache_map.end() || it->second->second->expires_at != expires_at) {
-            min_heap.pop();
-            continue;
-        }
+    auto [url, expires_at] = min_heap.top();
+    auto it = cache_map.find(url);
 
-        int now = GetCurrentSeconds();
-
-        if (now < expires_at) {
-            return false; 
-        }
-
-        cache_list.erase(it->second);
-        cache_map.erase(it);
+    if (it == cache_map.end() || it->second->second->expires_at != expires_at) {
         min_heap.pop();
-
         return true;
     }
 
-    return false;
+    int64_t now = GetCurrentSeconds();
+
+    if (now < expires_at) {
+        return false;
+    }
+
+    cache_list.erase(it->second);
+    cache_map.erase(it);
+    min_heap.pop();
+
+    return true;
 }
 
 void CacheSpace::Cache::LogEvent(const std::string &url, bool hit) {    

@@ -3,6 +3,7 @@
 
 #include <string>
 #include <memory>
+#include <cstdint>
 #include "Cache.hpp"
 #include "httplib.h"
 
@@ -64,7 +65,7 @@ namespace ProxySpace {
         bool CheckCacheForResponse(const std::string &, httplib::Response &res);
         void HandleRequest(const httplib::Request&, httplib::Response&);
         bool MatchesEndpoint(const std::string&, const httplib::Request&, httplib::Response&);
-        std::optional<int> ParseMaxAge(const std::string&);
+        std::optional<int64_t> ParseMaxAge(const std::string&);
         void LogMessage(const std::string&);
         std::string SelectOrigin(const std::string&) const;
 

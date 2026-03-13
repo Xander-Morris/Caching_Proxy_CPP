@@ -5,20 +5,23 @@
 #include <queue>
 #include <list>
 #include <shared_mutex>
+#include <mutex>
+#include <condition_variable>
 #include <atomic>
+#include <cstdint>
 #include "httplib.h"
 
 namespace CacheSpace {
     struct CachedResponse
     {
         int status;
-        int expires_at;
+        int64_t expires_at;
         httplib::Headers headers;
         std::string body;
     };
 
     using CACHE_PAIR = std::pair<std::string, std::shared_ptr<CachedResponse>>;
-    using PQ_PAIR = std::pair<std::string, int>; // url, expire time
+    using PQ_PAIR = std::pair<std::string, int64_t>; // url, expire time
     using HITS_AND_MISSES_PAIR = std::pair<long long, long long>;
 
     class Cache {
@@ -40,16 +43,18 @@ namespace CacheSpace {
         void IncrementCompliantMisses() {
             compliant_misses.fetch_add(1, std::memory_order_relaxed);
         }
-        int GetHits() const { return hits.load(std::memory_order_relaxed); }
-        int GetMisses() const { return misses.load(std::memory_order_relaxed); }
-        int GetCompliantMisses() const { return compliant_misses.load(std::memory_order_relaxed); }
+        int64_t GetHits() const { return hits.load(std::memory_order_relaxed); }
+        int64_t GetMisses() const { return misses.load(std::memory_order_relaxed); }
+        int64_t GetCompliantMisses() const { return compliant_misses.load(std::memory_order_relaxed); }
 
         const std::unordered_map<std::string, CacheSpace::HITS_AND_MISSES_PAIR> GetURLHitsAndMisses() const {
             std::shared_lock lock(mtx);
             return url_hits_and_misses;
         }
         void clear();
-        int GetCurrentSeconds();
+        int64_t GetCurrentSeconds();
+        std::condition_variable ttl_cv;
+        std::mutex ttl_mtx;
         bool CheckHeapTop();
         void LogEvent(const std::string&, bool);
 
@@ -68,9 +73,9 @@ namespace CacheSpace {
         std::unordered_map<std::string, CacheSpace::HITS_AND_MISSES_PAIR> url_hits_and_misses; 
         std::priority_queue<PQ_PAIR, std::vector<PQ_PAIR>, ComparePQPairs> min_heap;
         mutable std::shared_mutex mtx;
-        std::atomic<int> hits{0};
-        std::atomic<int> misses{0};
-        std::atomic<int> compliant_misses{0};
+        std::atomic<int64_t> hits{0};
+        std::atomic<int64_t> misses{0};
+        std::atomic<int64_t> compliant_misses{0};
         int capacity;
         int ttl_seconds;
     };

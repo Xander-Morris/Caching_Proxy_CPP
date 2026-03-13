@@ -98,7 +98,7 @@ void ProxySpace::Proxy::LogMessage(const std::string &message) {
 // Returns true if we handled the request completely.
 bool ProxySpace::Proxy::CheckCacheForResponse(const std::string &key, httplib::Response &res) {
     auto cached = cache.get(key);
-    int now = cache.GetCurrentSeconds();
+    int64_t now = cache.GetCurrentSeconds();
 
     if (!cached) {
         return false;
@@ -266,11 +266,11 @@ void ProxySpace::Proxy::HandleRequest(const httplib::Request &req, httplib::Resp
     filtered_headers.insert({"Content-Length", std::to_string(res.body.size())});
     res.headers = filtered_headers;
     res.headers.insert({"X-Cache", "MISS"});
-    int now = cache.GetCurrentSeconds();
-    int to_add = config.ttl;
+    int64_t now = cache.GetCurrentSeconds();
+    int64_t to_add = config.ttl;
 
     if (max_age) {
-        to_add = int(*max_age);
+        to_add = *max_age;
     }
 
     // Do not cache it if the TTL is 0.
@@ -290,10 +290,11 @@ void ProxySpace::Proxy::HandleRequest(const httplib::Request &req, httplib::Resp
 }
 
 void ProxySpace::Proxy::TTLFunction() {
-    const int interval = 1000;
-
     while (is_running) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(interval));        
+        {
+            std::unique_lock<std::mutex> lock(cache.ttl_mtx);
+            cache.ttl_cv.wait_for(lock, std::chrono::seconds(1));
+        }
         while (cache.CheckHeapTop()) {}
     }
 }
@@ -314,7 +315,7 @@ void ProxySpace::Proxy::StartServer() {
 }
 
 // It is possible for the max age to be 0.
-std::optional<int> ProxySpace::Proxy::ParseMaxAge(const std::string& cache_control) {
+std::optional<int64_t> ProxySpace::Proxy::ParseMaxAge(const std::string& cache_control) {
     LogMessage("Received cache control: " + cache_control);
     std::stringstream ss(cache_control);
     std::string directive;
@@ -330,7 +331,7 @@ std::optional<int> ProxySpace::Proxy::ParseMaxAge(const std::string& cache_contr
 
         if (lower.rfind("max-age=", 0) == 0) {
             try {
-                return std::stoi(lower.substr(8));
+                return std::stoll(lower.substr(8));
             } catch (...) {
                 return std::nullopt;
             }
