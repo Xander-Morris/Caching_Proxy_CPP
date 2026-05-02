@@ -4,6 +4,7 @@
 #include <string>
 #include <memory>
 #include <cstdint>
+#include <thread>
 #include "Cache.hpp"
 #include "httplib.h"
 

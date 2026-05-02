@@ -306,8 +306,12 @@ void ProxySpace::Proxy::StartServer() {
         HandleRequest(req, res);
     });
 
-    svr.set_payload_max_length(1 * 1024 * 1024); // 1 MB limit for request bodies
-    bool started = svr.listen("localhost", config.port, /*use_multithread=*/true);
+    svr.new_task_queue = [] {
+        return new httplib::ThreadPool(std::max(std::thread::hardware_concurrency(), 4u), 100);
+    };
+
+    svr.set_payload_max_length(1 * 1024 * 1024);
+    bool started = svr.listen("localhost", config.port);
 
     if (!started) {
         std::cerr << "ERROR: Failed to bind to port " << config.port << ". It is likely being used by something else.\n";
