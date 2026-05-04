@@ -59,11 +59,11 @@ namespace ProxySpace {
 
             svr.stop();
         }
-        std::string MakeCacheKey(const httplib::Request&) const;
+        std::string MakeCacheKey(const httplib::Request&, const std::string&) const;
         void StartServer();
         void BuildClients();
         void BuildEndpoints();
-        bool CheckCacheForResponse(const std::string &, httplib::Response &res);
+        bool CheckCacheForResponse(const std::string&, const std::string&, httplib::Response&);
         void HandleRequest(const httplib::Request&, httplib::Response&);
         bool MatchesEndpoint(const std::string&, const httplib::Request&, httplib::Response&);
         std::optional<int64_t> ParseMaxAge(const std::string&);

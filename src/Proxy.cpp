@@ -95,8 +95,7 @@ void ProxySpace::Proxy::LogMessage(const std::string &message) {
     std::cout << "[PORT " << config.port << "] " << message << "\n";
 }
 
-// Returns true if we handled the request completely.
-bool ProxySpace::Proxy::CheckCacheForResponse(const std::string &key, httplib::Response &res) {
+bool ProxySpace::Proxy::CheckCacheForResponse(const std::string &key, const std::string &path, httplib::Response &res) {
     auto cached = cache.get(key);
     int64_t now = cache.GetCurrentSeconds();
 
@@ -104,7 +103,7 @@ bool ProxySpace::Proxy::CheckCacheForResponse(const std::string &key, httplib::R
         return false;
     }
 
-    if (cached->expires_at < now) {
+    if (cached->expires_at <= now) {
         httplib::Headers headers;
         headers.insert({"Host", config.origin_url});
         headers.insert({"Connection", "close"});
@@ -119,13 +118,13 @@ bool ProxySpace::Proxy::CheckCacheForResponse(const std::string &key, httplib::R
 
         if (cached->headers.contains("Last-Modified")) {
             auto it = cached->headers.find("Last-Modified");
-            
+
             if (it != cached->headers.end()) {
                 headers.insert({"If-Modified-Since", it->second});
             }
         }
 
-        auto origin_res = clients.at(SelectOrigin(key))->Get(key.c_str(), headers);
+        auto origin_res = clients.at(SelectOrigin(path))->Get(path.c_str(), headers);
 
         if (!origin_res) {
             res.status = 502;
@@ -147,26 +146,23 @@ bool ProxySpace::Proxy::CheckCacheForResponse(const std::string &key, httplib::R
         res.status = cached->status;
         res.headers = cached->headers;
         res.body = cached->body;
-        
+
         return true;
     }
 
     return false;
 }
 
-std::string ProxySpace::Proxy::MakeCacheKey(const httplib::Request& req) const {
+std::string ProxySpace::Proxy::MakeCacheKey(const httplib::Request& req, const std::string& vary_spec) const {
     std::string key = req.target;
 
-    if (key.empty()) { 
+    if (key.empty()) {
         key = "/";
-        return key; 
+        return key;
     }
 
-    auto vary_it = req.headers.find("Vary");
-
-    if (vary_it != req.headers.end()) {
-        std::string vary_headers = vary_it->second;
-        std::stringstream ss(vary_headers);
+    if (!vary_spec.empty()) {
+        std::stringstream ss(vary_spec);
         std::string header_name;
 
         while (std::getline(ss, header_name, ',')) {
@@ -184,15 +180,14 @@ std::string ProxySpace::Proxy::MakeCacheKey(const httplib::Request& req) const {
 }
 
 void ProxySpace::Proxy::HandleRequest(const httplib::Request &req, httplib::Response &res) {
-    std::string key = MakeCacheKey(req);
+    std::string key = MakeCacheKey(req, cache.GetVarySpec(req.target));
     LogMessage("Received request for " + key);
 
-    if (MatchesEndpoint(key, req, res)) {
-        // Do not cache results from endpoint requests.
+    if (MatchesEndpoint(req.target, req, res)) {
         return;
     }
 
-    if (CheckCacheForResponse(key, res)) {
+    if (CheckCacheForResponse(key, req.target, res)) {
         cache.LogEvent(key, true);
         return;
     }
@@ -200,8 +195,8 @@ void ProxySpace::Proxy::HandleRequest(const httplib::Request &req, httplib::Resp
     httplib::Headers headers;
     headers.insert({"Host", config.origin_url});
     headers.insert({"Connection", "close"});
-    std::string origin_host = SelectOrigin(key);
-    std::cout << "Selected origin: " << origin_host << " for request path: " << key << "\n";
+    std::string origin_host = SelectOrigin(req.target);
+    std::cout << "Selected origin: " << origin_host << " for request path: " << req.target << "\n";
 
     if (!clients.contains(origin_host)) {
         res.status = 502;
@@ -214,14 +209,14 @@ void ProxySpace::Proxy::HandleRequest(const httplib::Request &req, httplib::Resp
     bool too_large = false;
 
     auto origin_res = cli->Get(
-        key.c_str(),
+        req.target.c_str(),
         headers,
         [&](const char* data, size_t length) {
             constexpr size_t MAX_RESPONSE_SIZE = 2 * 1024 * 1024;
 
             if (body.size() + length > MAX_RESPONSE_SIZE) {
                 too_large = true;
-                return false; // abort download
+                return false;
             }
 
             body.append(data, length);
@@ -254,12 +249,12 @@ void ProxySpace::Proxy::HandleRequest(const httplib::Request &req, httplib::Resp
     res.headers.clear();
     httplib::Headers filtered_headers;
 
-    for (const auto& [key, value] : origin_res->headers) {
-        std::string lower = key;
+    for (const auto& [hdr, value] : origin_res->headers) {
+        std::string lower = hdr;
         std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
 
         if (!ProxySpace::hop_by_hop.contains(lower)) {
-            filtered_headers.insert({key, value});
+            filtered_headers.insert({hdr, value});
         }
     }
 
@@ -273,20 +268,29 @@ void ProxySpace::Proxy::HandleRequest(const httplib::Request &req, httplib::Resp
         to_add = *max_age;
     }
 
-    // Do not cache it if the TTL is 0.
     if (to_add == 0) {
         cache.IncrementCompliantMisses();
         return;
     }
 
+    std::string vary_spec;
+    auto vary_it = origin_res->headers.find("Vary");
+
+    if (vary_it != origin_res->headers.end()) {
+        vary_spec = vary_it->second;
+        cache.SetVarySpec(req.target, vary_spec);
+    }
+
+    std::string storage_key = MakeCacheKey(req, vary_spec);
+
     CacheSpace::CachedResponse cached;
     cached.status = origin_res->status;
     cached.body = origin_res->body;
-    cached.headers = filtered_headers;  
+    cached.headers = filtered_headers;
     cached.headers.insert({"X-Cache", "HIT"});
-    cached.expires_at = now + to_add;
-    cache.put(key, cached);
-    cache.LogEvent(key, false); // Only log the miss if the request was meant to be cached in the first place.
+    cached.expires_at = (to_add < 0) ? now : now + to_add;
+    cache.put(storage_key, cached);
+    cache.LogEvent(storage_key, false);
 }
 
 void ProxySpace::Proxy::TTLFunction() {
@@ -339,8 +343,10 @@ std::optional<int64_t> ProxySpace::Proxy::ParseMaxAge(const std::string& cache_c
             } catch (...) {
                 return std::nullopt;
             }
-        } else if (lower.rfind("no-store", 0) == 0 || lower.rfind("no-cache", 0) == 0) {
+        } else if (lower.rfind("no-store", 0) == 0) {
             return 0;
+        } else if (lower.rfind("no-cache", 0) == 0) {
+            return -1;
         }
     }
 

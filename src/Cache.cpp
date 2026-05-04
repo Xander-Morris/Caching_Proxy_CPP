@@ -48,6 +48,7 @@ void CacheSpace::Cache::clear() {
     cache_list.clear();
     cache_map.clear();
     url_hits_and_misses.clear();
+    vary_specs.clear();
     
     // Since there is no "clear" method for the min heap.
     while (!min_heap.empty()) {
@@ -100,10 +101,21 @@ bool CacheSpace::Cache::CheckHeapTop() {
     return true;
 }
 
-void CacheSpace::Cache::LogEvent(const std::string &url, bool hit) {    
+void CacheSpace::Cache::LogEvent(const std::string &url, bool hit) {
     if (hit) {
         IncrementHits(url);
     } else {
         IncrementMisses(url);
     }
+}
+
+std::string CacheSpace::Cache::GetVarySpec(const std::string& path) const {
+    std::shared_lock lock(mtx);
+    auto it = vary_specs.find(path);
+    return it != vary_specs.end() ? it->second : "";
+}
+
+void CacheSpace::Cache::SetVarySpec(const std::string& path, const std::string& vary) {
+    std::unique_lock lock(mtx);
+    vary_specs[path] = vary;
 }

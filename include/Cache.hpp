@@ -57,6 +57,8 @@ namespace CacheSpace {
         std::mutex ttl_mtx;
         bool CheckHeapTop();
         void LogEvent(const std::string&, bool);
+        std::string GetVarySpec(const std::string&) const;
+        void SetVarySpec(const std::string&, const std::string&);
 
         friend std::ostream& operator<<(std::ostream& os, const Cache& cache);
 
@@ -78,6 +80,7 @@ namespace CacheSpace {
         std::atomic<int64_t> compliant_misses{0};
         int capacity;
         int ttl_seconds;
+        std::unordered_map<std::string, std::string> vary_specs;
     };
 
     // Declared outside of the class.
